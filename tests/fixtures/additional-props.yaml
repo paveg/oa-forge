@@ -1,0 +1,136 @@
+openapi: "3.0.3"
+info:
+  title: AdditionalProperties Test
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List users
+      responses:
+        "200":
+          description: A list of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{userId}:
+    patch:
+      operationId: updateUser
+      summary: Partially update a user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+components:
+  schemas:
+    User:
+      type: object
+      description: A registered user in the system.
+      required:
+        - id
+        - email
+      properties:
+        id:
+          type: string
+          description: Unique user identifier
+          readOnly: true
+        email:
+          type: string
+          description: User's email address
+        name:
+          type: string
+          description: Display name
+        role:
+          type: string
+          description: User role
+          default: "member"
+          enum:
+            - admin
+            - member
+            - guest
+        metadata:
+          $ref: "#/components/schemas/Metadata"
+        createdAt:
+          type: string
+          description: ISO 8601 creation timestamp
+          readOnly: true
+
+    CreateUserBody:
+      type: object
+      description: Payload for creating a new user.
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          description: Email address for the new user
+        name:
+          type: string
+        role:
+          type: string
+          default: "member"
+
+    UpdateUserBody:
+      type: object
+      description: Partial update payload.
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+
+    Metadata:
+      type: object
+      description: Arbitrary key-value metadata.
+      additionalProperties:
+        type: string
+
+    Settings:
+      type: object
+      description: Nested settings map.
+      additionalProperties:
+        $ref: "#/components/schemas/SettingValue"
+
+    SettingValue:
+      type: object
+      description: A single setting entry.
+      required:
+        - value
+      properties:
+        value:
+          type: string
+        description:
+          type: string

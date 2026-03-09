@@ -1,0 +1,19 @@
+openapi: "3.0.3"
+info:
+  title: Schemas Only
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Status:
+      type: string
+      enum:
+        - active
+        - inactive
+    Config:
+      type: object
+      properties:
+        debug:
+          type: boolean
+          description: Enable debug mode
+          default: false

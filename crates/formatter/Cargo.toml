@@ -2,4 +2,7 @@
 name = "oa-forge-formatter"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "TypeScript code formatter for oa-forge"

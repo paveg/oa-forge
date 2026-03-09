@@ -1,0 +1,29 @@
+openapi: "3.0.3"
+info:
+  title: Shared Models
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Address:
+      type: object
+      required:
+        - street
+        - city
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        zipCode:
+          type: string
+    Country:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string

@@ -1,0 +1,198 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            npm-pkg: cli-darwin-arm64
+            binary: oa-forge
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            npm-pkg: cli-darwin-x64
+            binary: oa-forge
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            npm-pkg: cli-linux-x64
+            binary: oa-forge
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            npm-pkg: cli-linux-arm64
+            binary: oa-forge
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            npm-pkg: cli-win32-x64
+            binary: oa-forge.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p oa-forge
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Prepare npm package
+        shell: bash
+        run: |
+          mkdir -p "npm/${{ matrix.npm-pkg }}/bin"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "npm/${{ matrix.npm-pkg }}/bin/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.npm-pkg }}
+          path: npm/${{ matrix.npm-pkg }}/
+
+  publish-npm:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Copy binaries to npm packages
+        run: |
+          for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-x64 cli-linux-arm64 cli-win32-x64; do
+            cp -r "artifacts/$pkg/bin" "npm/$pkg/"
+            chmod +x npm/"$pkg"/bin/* 2>/dev/null || true
+          done
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-x64 cli-linux-arm64 cli-win32-x64; do
+            cd "npm/$pkg"
+            npm publish --access public || true
+            cd ../..
+          done
+
+      - name: Publish meta package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm/cli
+          npm publish --access public
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo publish -p oa-forge-ir --allow-dirty || true
+          cargo publish -p oa-forge-parser --allow-dirty || true
+          cargo publish -p oa-forge-formatter --allow-dirty || true
+          cargo publish -p oa-forge-emitter-types --allow-dirty || true
+          cargo publish -p oa-forge-emitter-client --allow-dirty || true
+          cargo publish -p oa-forge-emitter-query --allow-dirty || true
+          cargo publish -p oa-forge-emitter-zod --allow-dirty || true
+          cargo publish -p oa-forge-emitter-valibot --allow-dirty || true
+          cargo publish -p oa-forge-emitter-msw --allow-dirty || true
+          cargo publish -p oa-forge-emitter-mock --allow-dirty || true
+          cargo publish -p oa-forge-emitter-axios --allow-dirty || true
+          cargo publish -p oa-forge-emitter-hono --allow-dirty || true
+          cargo publish -p oa-forge-emitter-angular --allow-dirty || true
+          cargo publish -p oa-forge --allow-dirty || true
+
+  github-release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        id: changelog
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create tarballs
+        run: |
+          for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-x64 cli-linux-arm64 cli-win32-x64; do
+            tar -czf "oa-forge-$pkg.tar.gz" -C "artifacts/$pkg" .
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.content }}
+          files: |
+            oa-forge-*.tar.gz
+
+  update-changelog:
+    name: Update CHANGELOG.md
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate full changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --output CHANGELOG.md
+
+      - name: Commit and push CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(release): update CHANGELOG.md"
+          git push origin HEAD:main

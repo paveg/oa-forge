@@ -12,7 +12,25 @@ pub struct ApiSpec {
 pub struct TypeDef {
     pub name: String,
     pub description: Option<String>,
+    pub default_value: Option<serde_json::Value>,
+    pub format: Option<String>,
     pub repr: TypeRepr,
+    pub constraints: Constraints,
+}
+
+/// Validation constraints from JSON Schema.
+#[derive(Debug, Clone, Default)]
+pub struct Constraints {
+    pub min_length: Option<u64>,
+    pub max_length: Option<u64>,
+    pub pattern: Option<String>,
+    pub minimum: Option<f64>,
+    pub maximum: Option<f64>,
+    pub exclusive_minimum: Option<f64>,
+    pub exclusive_maximum: Option<f64>,
+    pub multiple_of: Option<f64>,
+    pub min_items: Option<u64>,
+    pub max_items: Option<u64>,
 }
 
 /// The representation of a type.
@@ -25,24 +43,24 @@ pub enum TypeRepr {
         properties: IndexMap<String, Property>,
     },
     /// T[]
-    Array {
-        items: Box<TypeRepr>,
-    },
+    Array { items: Box<TypeRepr> },
     /// A | B (oneOf / anyOf)
     Union {
         variants: Vec<TypeRepr>,
         discriminator: Option<String>,
     },
     /// Reference to a named type (may be circular)
-    Ref {
-        name: String,
-    },
+    Ref { name: String },
     /// Enum with string or number values
-    Enum {
-        values: Vec<EnumValue>,
-    },
+    Enum { values: Vec<EnumValue> },
     /// T | null
     Nullable(Box<TypeRepr>),
+    /// Record<string, T> (additionalProperties)
+    Map { value: Box<TypeRepr> },
+    /// [A, B, C] — tuple type (OpenAPI 3.1 prefixItems)
+    Tuple { items: Vec<TypeRepr> },
+    /// A & B (allOf that can't be flattened, e.g. base + oneOf)
+    Intersection { members: Vec<TypeRepr> },
     /// any / unknown
     Any,
 }
@@ -51,8 +69,11 @@ pub enum TypeRepr {
 pub struct Property {
     pub name: String,
     pub required: bool,
+    pub read_only: bool,
     pub description: Option<String>,
+    pub default_value: Option<serde_json::Value>,
     pub repr: TypeRepr,
+    pub constraints: Constraints,
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +99,33 @@ pub struct Endpoint {
     pub tags: Vec<String>,
     pub parameters: Vec<EndpointParam>,
     pub request_body: Option<TypeRepr>,
+    pub request_content_type: ContentType,
     pub response: Option<TypeRepr>,
+    pub response_type: ResponseType,
+    pub error_response: Option<TypeRepr>,
+}
+
+/// Content type of the request body.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContentType {
+    Json,
+    FormData,
+    TextPlain,
+    OctetStream,
+    None,
+}
+
+/// How the response should be parsed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResponseType {
+    /// application/json → response.json()
+    Json,
+    /// text/plain, text/html → response.text()
+    Text,
+    /// application/octet-stream, image/*, etc. → response.blob()
+    Blob,
+    /// 204 No Content → void (no body parsing)
+    Void,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +134,18 @@ pub struct EndpointParam {
     pub location: ParamLocation,
     pub required: bool,
     pub repr: TypeRepr,
+    pub array_style: Option<ArrayStyle>,
+}
+
+/// How array query parameters are serialized.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ArrayStyle {
+    /// `?tags=a,b,c` (style: form, explode: false)
+    Comma,
+    /// `?tags=a&tags=b&tags=c` (style: form, explode: true — OpenAPI default)
+    Multi,
+    /// `?tags[]=a&tags[]=b&tags[]=c` (non-standard but common)
+    Brackets,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -2,7 +2,15 @@
 name = "oa-forge-emitter-types"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "TypeScript type definition emitter for oa-forge"
 
 [dependencies]
-oa-forge-ir = { path = "../ir" }
+oa-forge-ir = { workspace = true }
+
+[dev-dependencies]
+oa-forge-parser = { workspace = true }
+oa-forge-ir = { workspace = true }
+insta = { workspace = true }

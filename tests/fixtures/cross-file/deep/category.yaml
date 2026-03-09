@@ -1,0 +1,17 @@
+openapi: "3.0.3"
+info:
+  title: Category Models
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Category:
+      type: object
+      required:
+        - id
+        - label
+      properties:
+        id:
+          type: integer
+        label:
+          type: string

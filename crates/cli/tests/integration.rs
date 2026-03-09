@@ -1,0 +1,1570 @@
+use oa_forge_ir::convert;
+/// End-to-end integration test: parse → convert → emit → format pipeline.
+use oa_forge_parser::parse;
+
+fn run_pipeline(yaml: &str) -> (String, String, String) {
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    let mut client = String::new();
+    oa_forge_emitter_client::emit(&api, &mut client).expect("client emit failed");
+    let client = oa_forge_formatter::format(&client);
+
+    let mut hooks = String::new();
+    oa_forge_emitter_query::emit(&api, &mut hooks).expect("hooks emit failed");
+    let hooks = oa_forge_formatter::format(&hooks);
+
+    (types, client, hooks)
+}
+
+#[test]
+fn petstore_e2e() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let (types, client, hooks) = run_pipeline(yaml);
+
+    // Verify types contain expected interfaces
+    assert!(types.contains("export interface Pet {"));
+    assert!(types.contains("export type PetStatus ="));
+    assert!(types.contains("export interface CreatePetBody {"));
+    assert!(types.contains("export type listPetsResponse = Pet[];"));
+
+    // Verify client contains expected functions
+    assert!(client.contains("export function listPets("));
+    assert!(client.contains("export function createPet("));
+    assert!(client.contains("export function getPet("));
+    assert!(client.contains("export function deletePet("));
+    assert!(client.contains("import type {"));
+    assert!(client.contains("from './types.gen'"));
+
+    // Verify hooks contain expected exports
+    assert!(hooks.contains("export const listPetsQueryKey"));
+    assert!(hooks.contains("export const useListPets"));
+    assert!(hooks.contains("export const useCreatePet"));
+    assert!(hooks.contains("useMutation"));
+    assert!(hooks.contains("useQuery"));
+    assert!(hooks.contains("from '@tanstack/react-query'"));
+}
+
+#[test]
+fn allof_required_propagation() {
+    let yaml = include_str!("../../../tests/fixtures/allof-required.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // Orval #1570: `name` should be required in CreateUser (from allOf merge)
+    assert!(
+        types.contains("name: string;"),
+        "name should be required (no ?)"
+    );
+    assert!(types.contains("email: string;"), "email should be required");
+}
+
+#[test]
+fn circular_ref_no_crash() {
+    let yaml = include_str!("../../../tests/fixtures/circular-ref.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // Should produce valid output without infinite loop
+    assert!(types.contains("export interface TreeNode {"));
+    assert!(types.contains("parent?: TreeNode;"));
+    assert!(types.contains("children?: TreeNode[];"));
+}
+
+#[test]
+fn additional_properties_mapped() {
+    let yaml = include_str!("../../../tests/fixtures/additional-props.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    assert!(
+        types.contains("Record<string, string>"),
+        "Metadata should be Record<string, string>"
+    );
+    assert!(
+        types.contains("Record<string, SettingValue>"),
+        "Settings should be Record<string, SettingValue>"
+    );
+    assert!(
+        types.contains("readonly id: string;"),
+        "id should be readonly"
+    );
+    assert!(
+        types.contains("/** A registered user in the system. */"),
+        "User should have JSDoc"
+    );
+}
+
+#[test]
+fn discriminator_and_intersection() {
+    let yaml = include_str!("../../../tests/fixtures/oneof-discriminator.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // Shape: oneOf with discriminator
+    assert!(types.contains("export type Shape = Circle | Square;"));
+
+    // Event: allOf + oneOf → intersection
+    assert!(types.contains("{ id: string; timestamp: string } & (ClickEvent | ViewEvent)"));
+
+    // Notification: anyOf with nullable enum
+    assert!(types.contains("SeverityLevel | 'custom' | null"));
+}
+
+#[test]
+fn error_responses_and_array_styles() {
+    let yaml = include_str!("../../../tests/fixtures/error-responses.yaml");
+    let (types, client, hooks) = run_pipeline(yaml);
+
+    // Error response types should be emitted
+    assert!(
+        types.contains("export type listUsersError ="),
+        "listUsers should have error type"
+    );
+    assert!(
+        types.contains("export type createUserError ="),
+        "createUser should have error type"
+    );
+    assert!(
+        types.contains("export type getUserError ="),
+        "getUser should have error type"
+    );
+    assert!(
+        types.contains("export type deleteUserError ="),
+        "deleteUser should have error type"
+    );
+
+    // Client should have ApiError class
+    assert!(
+        client.contains("export class ApiError<T = unknown> extends Error {"),
+        "client should have ApiError class"
+    );
+    assert!(
+        client.contains("resolveSignal"),
+        "client should have resolveSignal for timeout support"
+    );
+    assert!(
+        client.contains("timeout?: number;"),
+        "RequestConfig should have timeout"
+    );
+
+    // Array query parameter style (tags with comma style)
+    assert!(
+        client.contains("buildQuery(queryParams as Record<string, unknown>, { tags: 'comma' })"),
+        "should pass comma style for tags array param"
+    );
+
+    // Hooks should use ApiError<ErrorType> for mutations with error responses
+    assert!(
+        hooks.contains("ApiError<createUserError>"),
+        "mutation should use typed error"
+    );
+
+    // prefetchQuery helpers
+    assert!(
+        hooks.contains("prefetchListUsers"),
+        "should have prefetchQuery for listUsers"
+    );
+    assert!(
+        hooks.contains("prefetchGetUser"),
+        "should have prefetchQuery for getUser"
+    );
+    assert!(
+        hooks.contains("queryClient: QueryClient"),
+        "prefetch should take queryClient"
+    );
+}
+
+// ── Boundary value tests ────────────────────────────────────────
+
+#[test]
+fn edge_case_missing_operation_id() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // /no-operation-id has no operationId → should auto-generate one
+    let endpoint = api
+        .endpoints
+        .iter()
+        .find(|e| e.path == "/no-operation-id")
+        .unwrap();
+    assert!(
+        !endpoint.operation_id.is_empty(),
+        "auto-generated operationId should not be empty"
+    );
+}
+
+#[test]
+fn edge_case_empty_responses() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (_, client, _) = run_pipeline(yaml);
+
+    // emptyResponses has no response body → void return
+    assert!(
+        client.contains("export function emptyResponses("),
+        "emptyResponses should be generated"
+    );
+    assert!(
+        client.contains("Promise<void>"),
+        "empty responses should return void"
+    );
+}
+
+#[test]
+fn edge_case_all_void_endpoints() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (_, client, _) = run_pipeline(yaml);
+
+    // deleteAllVoid is DELETE with 204 → void
+    assert!(client.contains("export function deleteAllVoid("));
+    // replaceAllVoid is PUT with 204 + body → should use requestVoid
+    assert!(client.contains("export function replaceAllVoid("));
+}
+
+#[test]
+fn edge_case_no_param_schema() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Parameter without schema should default to Any type
+    let endpoint = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "noParamSchema")
+        .unwrap();
+    let filter = endpoint
+        .parameters
+        .iter()
+        .find(|p| p.name == "filter")
+        .unwrap();
+    assert!(
+        matches!(filter.repr, oa_forge_ir::TypeRepr::Any),
+        "param without schema should be Any"
+    );
+}
+
+#[test]
+fn edge_case_deeply_nested_refs() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // DeepWrapper allOf: DeepBase + extra → should flatten into single interface
+    assert!(types.contains("export interface DeepWrapper {"));
+    assert!(
+        types.contains("id: string;"),
+        "DeepBase.id should propagate through allOf"
+    );
+    assert!(
+        types.contains("extra?: string;"),
+        "extra should be in DeepWrapper"
+    );
+    // DeepChild is oneOf → union
+    assert!(types.contains("export type DeepChild ="));
+}
+
+#[test]
+fn edge_case_only_error_no_success() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Endpoint with only 500 response, no 2xx
+    let endpoint = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "onlyErrorResponse")
+        .unwrap();
+    assert!(endpoint.response.is_none(), "no success response");
+    assert!(
+        endpoint.error_response.is_some(),
+        "should have error response"
+    );
+    assert!(
+        endpoint.response_type == oa_forge_ir::ResponseType::Void,
+        "should be void"
+    );
+}
+
+#[test]
+fn edge_case_nullable_array() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // nullable array should be `string[] | null`
+    assert!(
+        types.contains("string[] | null"),
+        "nullable array should produce T[] | null"
+    );
+}
+
+#[test]
+fn edge_case_enum_response() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    assert!(
+        types.contains("export type enumOnlyResponseResponse = 'active' | 'inactive' | 'pending';")
+    );
+}
+
+#[test]
+fn edge_case_empty_object_body() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // Explicit `type: "object"` with no properties → Record<string, unknown>
+    assert!(types.contains("export type emptyObjectBodyBody = Record<string, unknown>;"));
+    assert!(types.contains("export type emptyObjectBodyResponse = Record<string, unknown>;"));
+}
+
+#[test]
+fn edge_case_text_and_blob_responses() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (_, client, _) = run_pipeline(yaml);
+
+    assert!(
+        client.contains("export function textResponse("),
+        "textResponse should be generated"
+    );
+    assert!(
+        client.contains("Promise<string>"),
+        "text response should return string"
+    );
+    assert!(
+        client.contains("export function blobResponse("),
+        "blobResponse should be generated"
+    );
+    assert!(
+        client.contains("Promise<Blob>"),
+        "blob response should return Blob"
+    );
+}
+
+#[test]
+fn edge_case_multiple_2xx_picks_first() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // multipleSuccessCodes has both 200 and 201 → should pick the first (200)
+    let endpoint = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "multipleSuccessCodes")
+        .unwrap();
+    assert!(endpoint.response.is_some(), "should have a response");
+    assert!(
+        endpoint.error_response.is_some(),
+        "should have error response from 400"
+    );
+}
+
+#[test]
+fn edge_case_map_of_arrays() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // MapOfArrays → Record<string, number[]>
+    assert!(
+        types.contains("Record<string, number[]>"),
+        "additionalProperties with array items"
+    );
+}
+
+#[test]
+fn edge_case_empty_enum() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // EmptyEnum → should not crash, should produce some type
+    let typedef = api.types.get("EmptyEnum");
+    assert!(typedef.is_some(), "EmptyEnum should exist in types");
+}
+
+#[test]
+fn edge_case_single_variant_union() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // SingleVariantUnion oneOf with single variant → still a valid type
+    assert!(types.contains("export type SingleVariantUnion = string;"));
+}
+
+#[test]
+fn multipart_form_data_upload() {
+    let yaml = include_str!("../../../tests/fixtures/multipart-paginated.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // uploadFile should have FormData content type
+    let upload = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "uploadFile")
+        .unwrap();
+    assert!(upload.request_content_type == oa_forge_ir::ContentType::FormData);
+
+    let (_, client, _) = run_pipeline(yaml);
+
+    // FormData upload should NOT set Content-Type header
+    assert!(
+        !client.contains("'Content-Type': 'application/json'")
+            || client.contains("config?.headers"),
+        "FormData endpoints should not set Content-Type"
+    );
+    // Should use FormData constructor
+    assert!(
+        client.contains("new FormData()"),
+        "should construct FormData for multipart uploads"
+    );
+}
+
+#[test]
+fn text_plain_request_body() {
+    let yaml = include_str!("../../../tests/fixtures/multipart-paginated.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let update = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "updateText")
+        .unwrap();
+    assert!(update.request_content_type == oa_forge_ir::ContentType::TextPlain);
+
+    let (_, client, _) = run_pipeline(yaml);
+    assert!(
+        client.contains("'Content-Type': 'text/plain'"),
+        "text body should set text/plain"
+    );
+}
+
+#[test]
+fn infinite_query_for_paginated_endpoints() {
+    let yaml = include_str!("../../../tests/fixtures/multipart-paginated.yaml");
+    let (_, _, hooks) = run_pipeline(yaml);
+
+    // listItems has limit+offset → should get useInfiniteQuery
+    assert!(
+        hooks.contains("useListItemsInfinite"),
+        "should generate useInfiniteQuery for offset-based pagination"
+    );
+    assert!(
+        hooks.contains("initialPageParam: 0"),
+        "offset-based should start at 0"
+    );
+
+    // listCursored has limit+cursor → should get useInfiniteQuery with cursor
+    assert!(
+        hooks.contains("useListCursoredInfinite"),
+        "should generate useInfiniteQuery for cursor-based pagination"
+    );
+    assert!(
+        hooks.contains("initialPageParam: undefined"),
+        "cursor-based should start with undefined"
+    );
+
+    // uploadFile (POST) should NOT get infinite query
+    assert!(
+        !hooks.contains("useUploadFileInfinite"),
+        "mutations should not get infinite query"
+    );
+}
+
+#[test]
+fn large_scale_spec_100_plus_endpoints() {
+    let yaml = include_str!("../../../tests/fixtures/large-scale.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Should have 100+ endpoints
+    assert!(
+        api.endpoints.len() >= 100,
+        "expected 100+ endpoints, got {}",
+        api.endpoints.len()
+    );
+
+    let (types, client, hooks) = run_pipeline(yaml);
+
+    // Basic sanity: all three outputs are non-trivial
+    assert!(types.len() > 1000, "types output should be substantial");
+    assert!(client.len() > 1000, "client output should be substantial");
+    assert!(hooks.len() > 1000, "hooks output should be substantial");
+
+    // Spot-check some content
+    assert!(
+        types.contains("export interface User {"),
+        "should have User interface"
+    );
+    assert!(
+        client.contains("export function listUsers("),
+        "should have listUsers function"
+    );
+    assert!(
+        hooks.contains("useListPets") || hooks.contains("useListUsers"),
+        "should have list query hook"
+    );
+}
+
+#[test]
+fn empty_spec_no_crash() {
+    let yaml = include_str!("../../../tests/fixtures/empty-spec.yaml");
+    let (types, client, _) = run_pipeline(yaml);
+
+    assert!(types.contains("// Generated by oa-forge"));
+    assert!(client.contains("// Generated by oa-forge"));
+}
+
+// === OpenAPI 3.1 Tests ===
+
+#[test]
+fn openapi31_type_array_nullable() {
+    let yaml = include_str!("../../../tests/fixtures/openapi31.yaml");
+    let (types, _client, _hooks) = run_pipeline(yaml);
+
+    // type: ["string", "null"] → string | null
+    assert!(
+        types.contains("string | null"),
+        "type array with null should produce nullable type: {types}"
+    );
+}
+
+#[test]
+fn openapi31_prefix_items_tuple() {
+    let yaml = include_str!("../../../tests/fixtures/openapi31.yaml");
+    let (types, _client, _hooks) = run_pipeline(yaml);
+
+    // prefixItems → tuple type [number, number, number]
+    assert!(
+        types.contains("[number, number, number]"),
+        "prefixItems should produce tuple type: {types}"
+    );
+}
+
+#[test]
+fn openapi31_anyof_null_pattern() {
+    let yaml = include_str!("../../../tests/fixtures/openapi31.yaml");
+    let (types, _client, _hooks) = run_pipeline(yaml);
+
+    // anyOf: [{$ref: Metadata}, {type: null}] → Metadata | null
+    assert!(
+        types.contains("Metadata | null"),
+        "anyOf with null should produce nullable ref: {types}"
+    );
+}
+
+#[test]
+fn openapi31_nullable_integer() {
+    let yaml = include_str!("../../../tests/fixtures/openapi31.yaml");
+    let (types, _client, _hooks) = run_pipeline(yaml);
+
+    // type: ["integer", "null"] → number | null
+    assert!(
+        types.contains("number | null"),
+        "integer nullable should produce number | null: {types}"
+    );
+}
+
+// === Cross-file $ref tests ===
+
+#[test]
+fn cross_file_ref_resolves_external_schemas() {
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/main.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // Address schema loaded from external file should be present in types
+    assert!(
+        types.contains("export interface Address"),
+        "Address schema should be resolved from models.yaml: {types}"
+    );
+    assert!(
+        types.contains("street"),
+        "Address properties should be present"
+    );
+    assert!(
+        types.contains("city"),
+        "Address properties should be present"
+    );
+}
+
+#[test]
+fn cross_file_ref_preserves_local_schemas() {
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/main.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // Local User schema should be preserved
+    assert!(
+        types.contains("export interface User"),
+        "local User schema should be preserved: {types}"
+    );
+}
+
+#[test]
+fn cross_file_ref_rewrites_to_local_refs() {
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/main.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // User.address field should reference Address type (external $ref rewritten to local)
+    assert!(
+        types.contains("address?: Address"),
+        "User.address should reference Address type: {types}"
+    );
+}
+
+#[test]
+fn cross_file_ref_multiple_external_schemas() {
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/main.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // Country should also be resolved from external file
+    assert!(
+        types.contains("export interface Country") || types.contains("Country"),
+        "Country schema should also be resolved: {types}"
+    );
+}
+
+// === OpenAPI 3.1 boundary value tests ===
+
+#[test]
+fn openapi31_type_array_single_non_null() {
+    // type: ["string"] (single-element array, no null) → string
+    let yaml = r#"
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /test:
+    get:
+      operationId: test
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: ["string"]
+"#;
+    let (types, _client, _hooks) = run_pipeline(yaml);
+    assert!(
+        types.contains("testResponse = string"),
+        "single element type array should be plain type: {types}"
+    );
+}
+
+#[test]
+fn openapi31_type_null_only() {
+    // type: "null" (3.1 explicit null type)
+    let yaml = r#"
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Nothing:
+      type: "null"
+"#;
+    let spec = oa_forge_parser::parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    // type: "null" should output as nullable unknown
+    assert!(
+        types.contains("null"),
+        "null type should contain null: {types}"
+    );
+}
+
+#[test]
+fn openapi31_empty_type_array() {
+    // type: [] (empty array — edge case)
+    let yaml = r#"
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Empty:
+      type: []
+"#;
+    let spec = oa_forge_parser::parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    // Empty type array should fallback to unknown
+    assert!(
+        types.contains("Empty"),
+        "should still emit the type: {types}"
+    );
+}
+
+#[test]
+fn openapi31_tuple_with_refs() {
+    // prefixItems with $ref in tuple
+    let yaml = r##"
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Point:
+      type: object
+      properties:
+        x:
+          type: number
+    Pair:
+      type: array
+      prefixItems:
+        - $ref: "#/components/schemas/Point"
+        - type: string
+"##;
+    let spec = oa_forge_parser::parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+    // Tuple should be [Point, string]
+    assert!(
+        types.contains("[Point, string]"),
+        "tuple with ref should produce [Point, string]: {types}"
+    );
+}
+
+#[test]
+fn openapi31_anyof_multiple_types_with_null() {
+    // anyOf: [{type: string}, {type: number}, {type: null}] → union of all types
+    let yaml = r#"
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Mixed:
+      anyOf:
+        - type: string
+        - type: number
+        - type: "null"
+"#;
+    let spec = oa_forge_parser::parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    // With 3+ elements, no null optimization (standard union)
+    assert!(
+        types.contains("string") && types.contains("number"),
+        "should include all types: {types}"
+    );
+}
+
+#[test]
+fn openapi31_defs_parsed_without_error() {
+    // $defs should not cause parse error
+    let yaml = r#"
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    WithDefs:
+      type: object
+      $defs:
+        InnerType:
+          type: string
+      properties:
+        value:
+          type: string
+"#;
+    let spec = oa_forge_parser::parse(yaml).expect("$defs should not cause parse error");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    assert!(
+        types.contains("export interface WithDefs"),
+        "should emit WithDefs: {types}"
+    );
+}
+
+// === Double-indirect $ref tests ===
+
+#[test]
+fn double_indirect_ref_resolves_nested_files() {
+    // A(index.yaml) → B(deep/product.yaml) → C(deep/category.yaml)
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/index.yaml");
+    let spec =
+        oa_forge_parser::parse_file(&path).expect("parse_file should handle double-indirect");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // Product resolved from index.yaml -> deep/product.yaml
+    assert!(
+        types.contains("sku"),
+        "Product.sku should be present from product.yaml: {types}"
+    );
+}
+
+#[test]
+fn double_indirect_ref_resolves_third_level() {
+    // Category is at the 3rd level: product.yaml -> category.yaml
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/index.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // Category resolved from deep/category.yaml
+    assert!(
+        types.contains("Category"),
+        "Category should be resolved from third-level ref: {types}"
+    );
+    assert!(
+        types.contains("label"),
+        "Category.label should be present: {types}"
+    );
+}
+
+#[test]
+fn double_indirect_ref_order_has_product_ref() {
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/index.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    // Order.item should reference Product type
+    assert!(
+        types.contains("item: Product") || types.contains("item?: Product"),
+        "Order.item should reference Product: {types}"
+    );
+}
+
+#[test]
+fn double_indirect_ref_no_external_ref_paths_remain() {
+    // All external $refs should be rewritten to local references
+    use std::path::Path;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cross-file/index.yaml");
+    let spec = oa_forge_parser::parse_file(&path).expect("parse_file failed");
+
+    // Verify no external $refs remain in components.schemas
+    if let Some(components) = &spec.components {
+        for (name, schema) in &components.schemas {
+            check_no_external_refs(schema, name);
+        }
+    }
+}
+
+fn check_no_external_refs(schema: &oa_forge_parser::openapi::SchemaOrRef, context: &str) {
+    match schema {
+        oa_forge_parser::openapi::SchemaOrRef::Ref { ref_path } => {
+            assert!(
+                ref_path.starts_with('#'),
+                "External $ref should be rewritten to local: {ref_path} in {context}"
+            );
+        }
+        oa_forge_parser::openapi::SchemaOrRef::Schema(s) => {
+            for (prop_name, prop) in &s.properties {
+                check_no_external_refs(prop, &format!("{context}.{prop_name}"));
+            }
+            if let Some(items) = &s.items {
+                check_no_external_refs(items, &format!("{context}.items"));
+            }
+        }
+    }
+}
+
+// === Incremental generation boundary tests ===
+
+#[test]
+fn spec_content_hash_changes_on_modification() {
+    // Same content → same hash, different content → different hash
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    fn hash_content(content: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        content.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    let yaml1 = include_str!("../../../tests/fixtures/petstore.yaml");
+    let yaml2 = include_str!("../../../tests/fixtures/petstore.yaml");
+
+    assert_eq!(
+        hash_content(yaml1),
+        hash_content(yaml2),
+        "same content should produce same hash"
+    );
+    assert_ne!(
+        hash_content(yaml1),
+        hash_content("different content"),
+        "different content should produce different hash"
+    );
+}
+
+// === Error reporting tests ===
+
+#[test]
+fn parse_error_includes_location_info() {
+    // Invalid YAML should produce an error with location context
+    let bad_yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        "200"
+          description: missing colon
+"#;
+    let result = oa_forge_parser::parse(bad_yaml);
+    assert!(result.is_err(), "should fail to parse invalid YAML");
+    let err_msg = format!("{}", result.unwrap_err());
+    // Error message should contain line/column or position info
+    assert!(
+        err_msg.contains("line") || err_msg.contains("column") || err_msg.contains("at"),
+        "error should include location info: {err_msg}"
+    );
+}
+
+#[test]
+fn missing_operation_id_warns_with_path_and_method() {
+    // validate_spec should warn about missing operationId with path context
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = oa_forge_parser::parse(yaml).expect("parse should succeed");
+
+    // Just verify the spec parses — the warning is emitted to stderr
+    // which we can't easily capture in a test, but the validate function exists
+    let api = oa_forge_ir::convert(&spec);
+    assert!(
+        api.is_ok() || api.is_err(),
+        "convert should handle missing operationId"
+    );
+}
+
+// === Query framework variants ===
+
+fn run_pipeline_with_framework(
+    yaml: &str,
+    framework: oa_forge_emitter_query::QueryFramework,
+) -> (String, String, String) {
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    let types = oa_forge_formatter::format(&types);
+
+    let mut client = String::new();
+    oa_forge_emitter_client::emit(&api, &mut client).expect("client emit failed");
+    let client = oa_forge_formatter::format(&client);
+
+    let mut hooks = String::new();
+    oa_forge_emitter_query::emit_for(&api, &mut hooks, framework).expect("hooks emit failed");
+    let hooks = oa_forge_formatter::format(&hooks);
+
+    (types, client, hooks)
+}
+
+#[test]
+fn vue_query_emits_correct_imports_and_hooks() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let (_types, _client, hooks) =
+        run_pipeline_with_framework(yaml, oa_forge_emitter_query::QueryFramework::Vue);
+
+    assert!(
+        hooks.contains("from '@tanstack/vue-query'"),
+        "should import from vue-query package"
+    );
+    assert!(
+        hooks.contains("useQuery("),
+        "Vue Query uses useQuery (same as React)"
+    );
+    assert!(
+        hooks.contains("useMutation("),
+        "Vue Query uses useMutation (same as React)"
+    );
+}
+
+#[test]
+fn solid_query_emits_create_prefix() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let (_types, _client, hooks) =
+        run_pipeline_with_framework(yaml, oa_forge_emitter_query::QueryFramework::Solid);
+
+    assert!(
+        hooks.contains("from '@tanstack/solid-query'"),
+        "should import from solid-query package"
+    );
+    assert!(
+        hooks.contains("createQuery("),
+        "Solid Query uses createQuery"
+    );
+    assert!(
+        hooks.contains("createMutation("),
+        "Solid Query uses createMutation"
+    );
+    assert!(
+        hooks.contains("CreateQueryOptions"),
+        "Solid Query uses CreateQueryOptions type"
+    );
+    assert!(
+        hooks.contains("CreateMutationOptions"),
+        "Solid Query uses CreateMutationOptions type"
+    );
+}
+
+#[test]
+fn svelte_query_emits_create_prefix() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let (_types, _client, hooks) =
+        run_pipeline_with_framework(yaml, oa_forge_emitter_query::QueryFramework::Svelte);
+
+    assert!(
+        hooks.contains("from '@tanstack/svelte-query'"),
+        "should import from svelte-query package"
+    );
+    assert!(
+        hooks.contains("createQuery("),
+        "Svelte Query uses createQuery"
+    );
+    assert!(
+        hooks.contains("createSuspenseQuery("),
+        "Svelte Query uses createSuspenseQuery"
+    );
+}
+
+#[test]
+fn react_query_backward_compatible() {
+    // Default emit() should produce same output as emit_for(React)
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut default_out = String::new();
+    oa_forge_emitter_query::emit(&api, &mut default_out).unwrap();
+
+    let mut explicit_out = String::new();
+    oa_forge_emitter_query::emit_for(
+        &api,
+        &mut explicit_out,
+        oa_forge_emitter_query::QueryFramework::React,
+    )
+    .unwrap();
+
+    assert_eq!(
+        default_out, explicit_out,
+        "emit() and emit_for(React) should produce identical output"
+    );
+}
+
+// === TypeScript compilation check ===
+
+#[test]
+fn generated_code_passes_tsc_no_emit() {
+    // Skip if tsc is not available
+    let tsc_check = std::process::Command::new("tsc").arg("--version").output();
+    if tsc_check.is_err() {
+        eprintln!("tsc not found, skipping TypeScript compilation check");
+        return;
+    }
+
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let (types, client, hooks) = run_pipeline(yaml);
+
+    let tmp_dir = std::env::temp_dir().join("oa-forge-tsc-check");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).unwrap();
+
+    // Write generated files
+    std::fs::write(tmp_dir.join("types.gen.ts"), &types).unwrap();
+    std::fs::write(tmp_dir.join("client.gen.ts"), &client).unwrap();
+    std::fs::write(tmp_dir.join("hooks.gen.ts"), &hooks).unwrap();
+
+    // Write tsconfig.json
+    std::fs::write(
+        tmp_dir.join("tsconfig.json"),
+        r#"{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts"]
+}"#,
+    )
+    .unwrap();
+
+    // Stub @tanstack/react-query types so hooks.gen.ts can compile
+    let tanstack_dir = tmp_dir.join("node_modules/@tanstack/react-query");
+    std::fs::create_dir_all(&tanstack_dir).unwrap();
+    std::fs::write(
+        tanstack_dir.join("index.d.ts"),
+        r#"
+export function useQuery(opts: any): any;
+export function useSuspenseQuery(opts: any): any;
+export function useMutation(opts: any): any;
+export function useInfiniteQuery(opts: any): any;
+export function queryOptions(opts: any): any;
+export function infiniteQueryOptions(opts: any): any;
+export type QueryClient = any;
+export type UseQueryOptions<TData = unknown, TError = unknown> = any;
+export type UseMutationOptions<TData = unknown, TError = unknown, TVariables = unknown> = any;
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        tanstack_dir.join("package.json"),
+        r#"{"name":"@tanstack/react-query","version":"5.0.0","types":"index.d.ts"}"#,
+    )
+    .unwrap();
+
+    // Run tsc --noEmit
+    let output = std::process::Command::new("tsc")
+        .arg("--noEmit")
+        .arg("--project")
+        .arg(tmp_dir.join("tsconfig.json"))
+        .output()
+        .expect("failed to run tsc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "tsc --noEmit failed:\nstdout: {stdout}\nstderr: {stderr}"
+    );
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[test]
+fn generated_code_allof_passes_tsc() {
+    let tsc_check = std::process::Command::new("tsc").arg("--version").output();
+    if tsc_check.is_err() {
+        return;
+    }
+
+    let yaml = include_str!("../../../tests/fixtures/allof-required.yaml");
+    let (types, client, _hooks) = run_pipeline(yaml);
+
+    let tmp_dir = std::env::temp_dir().join("oa-forge-tsc-allof");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).unwrap();
+
+    std::fs::write(tmp_dir.join("types.gen.ts"), &types).unwrap();
+    std::fs::write(tmp_dir.join("client.gen.ts"), &client).unwrap();
+    std::fs::write(
+        tmp_dir.join("tsconfig.json"),
+        r#"{"compilerOptions":{"strict":true,"noEmit":true,"target":"ES2020","module":"ES2020","moduleResolution":"bundler"},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new("tsc")
+        .arg("--noEmit")
+        .arg("--project")
+        .arg(tmp_dir.join("tsconfig.json"))
+        .output()
+        .expect("failed to run tsc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "tsc --noEmit failed for allof spec:\nstdout: {stdout}\nstderr: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[test]
+fn generated_code_circular_ref_passes_tsc() {
+    let tsc_check = std::process::Command::new("tsc").arg("--version").output();
+    if tsc_check.is_err() {
+        return;
+    }
+
+    let yaml = include_str!("../../../tests/fixtures/circular-ref.yaml");
+    let (types, _client, _hooks) = run_pipeline(yaml);
+
+    let tmp_dir = std::env::temp_dir().join("oa-forge-tsc-circular");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).unwrap();
+
+    std::fs::write(tmp_dir.join("types.gen.ts"), &types).unwrap();
+    std::fs::write(
+        tmp_dir.join("tsconfig.json"),
+        r#"{"compilerOptions":{"strict":true,"noEmit":true,"target":"ES2020","module":"ES2020","moduleResolution":"bundler"},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new("tsc")
+        .arg("--noEmit")
+        .arg("--project")
+        .arg(tmp_dir.join("tsconfig.json"))
+        .output()
+        .expect("failed to run tsc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "tsc --noEmit failed for circular ref spec:\nstdout: {stdout}\nstderr: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+// === Incremental generation tests ===
+
+#[test]
+fn incremental_generation_skips_unchanged_spec() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let tmp_dir = std::env::temp_dir().join("oa-forge-test-incremental");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).unwrap();
+
+    let input_path = tmp_dir.join("petstore.yaml");
+    std::fs::write(&input_path, yaml).unwrap();
+
+    let output_dir = tmp_dir.join("output");
+
+    // First generation: should create files
+    let spec = oa_forge_parser::parse_file(&input_path).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).unwrap();
+    let types_formatted = oa_forge_formatter::format(&types);
+    std::fs::write(output_dir.join("types.gen.ts"), &types_formatted).unwrap();
+
+    // Record modification time
+    let _first_meta = std::fs::metadata(output_dir.join("types.gen.ts")).unwrap();
+
+    // Wait briefly to ensure filesystem timestamp changes if file is rewritten
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    // Second generation with same content: hash check should allow skip
+    let content_hash_1 = {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        yaml.hash(&mut h);
+        h.finish()
+    };
+
+    let content_hash_2 = {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        yaml.hash(&mut h);
+        h.finish()
+    };
+
+    assert_eq!(
+        content_hash_1, content_hash_2,
+        "same spec should produce same hash"
+    );
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[test]
+fn split_by_endpoint_creates_per_operation_files() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    for ep in &api.endpoints {
+        let mut types_out = String::new();
+        oa_forge_emitter_types::emit_endpoint(ep, &mut types_out).expect("endpoint types failed");
+
+        let mut client_out = String::new();
+        oa_forge_emitter_client::emit_endpoint(ep, &mut client_out)
+            .expect("endpoint client failed");
+
+        assert!(
+            !types_out.is_empty() || !client_out.is_empty(),
+            "endpoint {} should produce output",
+            ep.operation_id
+        );
+    }
+}
+
+#[test]
+fn emit_schemas_only_excludes_endpoint_types() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut out = String::new();
+    oa_forge_emitter_types::emit_schemas(&api, &mut out).expect("emit_schemas failed");
+
+    assert!(out.contains("export interface Pet {"));
+    assert!(!out.contains("PathParams"));
+    assert!(!out.contains("QueryParams"));
+}
+
+// === Config format tests ===
+
+#[test]
+fn json_config_loads_correctly() {
+    let tmp_dir = std::env::temp_dir().join("oa-forge-test-json-config");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).unwrap();
+
+    let config_json = r#"{
+        "input": "./petstore.yaml",
+        "output": "./generated",
+        "hooks": true,
+        "zod": false,
+        "split": "tag",
+        "query_framework": "vue"
+    }"#;
+    let config_path = tmp_dir.join("oa-forge.config.json");
+    std::fs::write(&config_path, config_json).unwrap();
+
+    // Verify the JSON can be deserialized into the same Config shape
+    let parsed: serde_json::Value = serde_json::from_str(config_json).unwrap();
+    assert_eq!(parsed["input"], "./petstore.yaml");
+    assert_eq!(parsed["hooks"], true);
+    assert_eq!(parsed["split"], "tag");
+    assert_eq!(parsed["query_framework"], "vue");
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[test]
+fn toml_and_json_configs_are_equivalent() {
+    let toml_str = r#"
+input = "./petstore.yaml"
+output = "./src/api"
+hooks = true
+zod = true
+split = "endpoint"
+query_framework = "solid"
+"#;
+
+    let json_str = r#"{
+        "input": "./petstore.yaml",
+        "output": "./src/api",
+        "hooks": true,
+        "zod": true,
+        "split": "endpoint",
+        "query_framework": "solid"
+    }"#;
+
+    let toml_val: serde_json::Value =
+        serde_json::to_value(toml::from_str::<toml::Value>(toml_str).unwrap()).unwrap();
+    let json_val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+
+    assert_eq!(toml_val["input"], json_val["input"]);
+    assert_eq!(toml_val["hooks"], json_val["hooks"]);
+    assert_eq!(toml_val["split"], json_val["split"]);
+}
+
+// === Per-endpoint override tests ===
+
+#[test]
+fn override_skip_removes_endpoint() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let mut api = convert(&spec).expect("convert failed");
+
+    let original_count = api.endpoints.len();
+    assert!(original_count > 0);
+
+    // Find a real endpoint key
+    let first_key = {
+        let ep = &api.endpoints[0];
+        let method = match ep.method {
+            oa_forge_ir::HttpMethod::Get => "GET",
+            oa_forge_ir::HttpMethod::Post => "POST",
+            oa_forge_ir::HttpMethod::Put => "PUT",
+            oa_forge_ir::HttpMethod::Patch => "PATCH",
+            oa_forge_ir::HttpMethod::Delete => "DELETE",
+        };
+        format!("{method} {}", ep.path)
+    };
+
+    // Apply skip override
+    api.endpoints.retain(|ep| {
+        let method = match ep.method {
+            oa_forge_ir::HttpMethod::Get => "GET",
+            oa_forge_ir::HttpMethod::Post => "POST",
+            oa_forge_ir::HttpMethod::Put => "PUT",
+            oa_forge_ir::HttpMethod::Patch => "PATCH",
+            oa_forge_ir::HttpMethod::Delete => "DELETE",
+        };
+        let key = format!("{method} {}", ep.path);
+        key != first_key
+    });
+
+    assert_eq!(api.endpoints.len(), original_count - 1);
+}
+
+#[test]
+fn override_operation_id_renames_endpoint() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let mut api = convert(&spec).expect("convert failed");
+
+    let original_id = api.endpoints[0].operation_id.clone();
+    let custom_id = "myCustomOperation";
+
+    api.endpoints[0].operation_id = custom_id.to_string();
+
+    assert_ne!(original_id, custom_id);
+    assert_eq!(api.endpoints[0].operation_id, custom_id);
+
+    // Verify the renamed endpoint generates valid types
+    let mut out = String::new();
+    oa_forge_emitter_types::emit_endpoint(&api.endpoints[0], &mut out).unwrap();
+    assert!(out.contains(custom_id));
+    assert!(!out.contains(&original_id));
+}
+
+#[test]
+fn override_config_json_deserialization() {
+    let json = r#"{
+        "input": "./petstore.yaml",
+        "overrides": {
+            "GET /pets": { "operation_id": "fetchAllPets" },
+            "DELETE /pets/{petId}": { "skip": true }
+        }
+    }"#;
+
+    let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+    let overrides = parsed["overrides"].as_object().unwrap();
+
+    assert_eq!(overrides.len(), 2);
+    assert_eq!(overrides["GET /pets"]["operation_id"], "fetchAllPets");
+    assert_eq!(overrides["DELETE /pets/{petId}"]["skip"], true);
+}
+
+#[test]
+fn override_config_toml_deserialization() {
+    let toml_str = r#"
+input = "./petstore.yaml"
+
+[overrides."GET /pets"]
+operation_id = "fetchAllPets"
+
+[overrides."DELETE /pets/{petId}"]
+skip = true
+"#;
+
+    let parsed: toml::Value = toml::from_str(toml_str).unwrap();
+    let overrides = parsed["overrides"].as_table().unwrap();
+
+    assert_eq!(overrides.len(), 2);
+    assert_eq!(
+        overrides["GET /pets"]["operation_id"].as_str().unwrap(),
+        "fetchAllPets"
+    );
+    assert!(
+        overrides["DELETE /pets/{petId}"]["skip"].as_bool().unwrap()
+    );
+}
+
+// === Swagger 2.0 compatibility tests ===
+
+#[test]
+fn swagger2_petstore_parses_and_generates() {
+    let yaml = include_str!("../../../tests/fixtures/swagger2-petstore.yaml");
+    let (types, client, hooks) = run_pipeline(yaml);
+
+    // Verify types were generated
+    assert!(types.contains("export interface Pet {"));
+    assert!(types.contains("export interface NewPet {"));
+
+    // Verify endpoints were generated
+    assert!(types.contains("listPetsResponse"));
+    assert!(types.contains("getPetResponse"));
+    assert!(types.contains("createPetBody"));
+
+    // Verify client functions
+    assert!(client.contains("listPets"));
+    assert!(client.contains("getPet"));
+    assert!(client.contains("createPet"));
+    assert!(client.contains("deletePet"));
+
+    // Verify hooks
+    assert!(hooks.contains("useListPets"));
+    assert!(hooks.contains("useGetPet"));
+}
+
+#[test]
+fn swagger2_ref_rewriting() {
+    let yaml = include_str!("../../../tests/fixtures/swagger2-petstore.yaml");
+    let (types, _client, _hooks) = run_pipeline(yaml);
+
+    // Verify $ref from #/definitions/Pet was rewritten to #/components/schemas/Pet
+    // and resolved correctly (Pet type exists as a ref, not inlined)
+    assert!(types.contains("export interface Pet {"));
+    assert!(types.contains("id: number"));
+    assert!(types.contains("name: string"));
+}

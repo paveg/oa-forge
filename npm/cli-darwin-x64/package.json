@@ -1,0 +1,14 @@
+{
+  "name": "@oa-forge/cli-darwin-x64",
+  "version": "0.1.0",
+  "description": "oa-forge binary for darwin-x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paveg/oa-forge"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin"],
+  "preferUnplugged": true
+}

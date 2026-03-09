@@ -3,13 +3,18 @@ use std::collections::HashSet;
 use crate::openapi::{Components, SchemaOrRef};
 
 /// Resolve a $ref path like "#/components/schemas/Pet" to the referenced schema.
-pub fn resolve_ref<'a>(ref_path: &str, components: Option<&'a Components>) -> Option<&'a SchemaOrRef> {
-    let parts: Vec<&str> = ref_path.trim_start_matches('#').trim_start_matches('/').split('/').collect();
+pub fn resolve_ref<'a>(
+    ref_path: &str,
+    components: Option<&'a Components>,
+) -> Option<&'a SchemaOrRef> {
+    let parts: Vec<&str> = ref_path
+        .trim_start_matches('#')
+        .trim_start_matches('/')
+        .split('/')
+        .collect();
 
     match parts.as_slice() {
-        ["components", "schemas", name] => {
-            components?.schemas.get(*name)
-        }
+        ["components", "schemas", name] => components?.schemas.get(*name),
         _ => None,
     }
 }
@@ -41,10 +46,10 @@ pub fn detect_circular_refs(
                     return true;
                 }
             }
-            if let Some(items) = &schema.items {
-                if detect_circular_refs(items, components, visited) {
-                    return true;
-                }
+            if let Some(items) = &schema.items
+                && detect_circular_refs(items, components, visited)
+            {
+                return true;
             }
             if let Some(all_of) = &schema.all_of {
                 for s in all_of {
@@ -108,8 +113,18 @@ components:
           $ref: "#/components/schemas/Node"
 "##;
         let spec = parse(yaml).unwrap();
-        let schema = spec.components.as_ref().unwrap().schemas.get("Node").unwrap();
+        let schema = spec
+            .components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .get("Node")
+            .unwrap();
         let mut visited = HashSet::new();
-        assert!(detect_circular_refs(schema, spec.components.as_ref(), &mut visited));
+        assert!(detect_circular_refs(
+            schema,
+            spec.components.as_ref(),
+            &mut visited
+        ));
     }
 }

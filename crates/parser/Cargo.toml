@@ -2,7 +2,10 @@
 name = "oa-forge-parser"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "OpenAPI 3.0/3.1 parser with $ref resolution for oa-forge"
 
 [dependencies]
 serde = { workspace = true }

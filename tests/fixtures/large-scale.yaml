@@ -1,0 +1,3625 @@
+openapi: "3.0.3"
+info:
+  title: Enterprise Platform API
+  version: "2.1.0"
+  description: A comprehensive enterprise platform API.
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.example.com/v2
+tags:
+  - name: users
+    description: User management
+  - name: posts
+    description: Blog posts
+  - name: comments
+    description: Post comments
+  - name: products
+    description: Product catalog
+  - name: orders
+    description: Order management
+  - name: categories
+    description: Product categories
+  - name: reviews
+    description: Product reviews
+  - name: settings
+    description: Application settings
+  - name: notifications
+    description: User notifications
+  - name: tags
+    description: Content tags
+  - name: media
+    description: Media assets
+  - name: analytics
+    description: Analytics and reporting
+  - name: auth
+    description: Authentication
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/UserRole"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/AccountStatus"
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/{userId}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: replaceUser
+      tags: [users]
+      summary: Replace a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Partially update a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchUserRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/{userId}/avatar:
+    put:
+      operationId: uploadUserAvatar
+      tags: [users]
+      summary: Upload user avatar
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteUserAvatar
+      tags: [users]
+      summary: Delete user avatar
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{userId}/posts:
+    get:
+      operationId: listUserPosts
+      tags: [users, posts]
+      summary: List posts by a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{userId}/orders:
+    get:
+      operationId: listUserOrders
+      tags: [users, orders]
+      summary: List orders by a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Order"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{userId}/notifications:
+    get:
+      operationId: listUserNotifications
+      tags: [users, notifications]
+      summary: List notifications for a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - name: read
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Notification"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{userId}/reviews:
+    get:
+      operationId: listUserReviews
+      tags: [users, reviews]
+      summary: List reviews by a user
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Review"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{userId}/settings:
+    get:
+      operationId: getUserSettings
+      tags: [users, settings]
+      summary: Get user settings
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSettings"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateUserSettings
+      tags: [users, settings]
+      summary: Update user settings
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSettings"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts:
+    get:
+      operationId: listPosts
+      tags: [posts]
+      summary: List posts
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/PostStatus"
+        - name: tagId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: authorId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createPost
+      tags: [posts]
+      summary: Create a post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /posts/{postId}:
+    get:
+      operationId: getPost
+      tags: [posts]
+      summary: Get a post by ID
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replacePost
+      tags: [posts]
+      summary: Replace a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updatePost
+      tags: [posts]
+      summary: Partially update a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchPostRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deletePost
+      tags: [posts]
+      summary: Delete a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{postId}/publish:
+    post:
+      operationId: publishPost
+      tags: [posts]
+      summary: Publish a draft post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{postId}/archive:
+    post:
+      operationId: archivePost
+      tags: [posts]
+      summary: Archive a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{postId}/comments:
+    get:
+      operationId: listPostComments
+      tags: [posts, comments]
+      summary: List comments on a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Comment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createPostComment
+      tags: [posts, comments]
+      summary: Add a comment to a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{postId}/tags:
+    get:
+      operationId: listPostTags
+      tags: [posts, tags]
+      summary: List tags on a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: setPostTags
+      tags: [posts, tags]
+      summary: Set tags on a post
+      parameters:
+        - $ref: "#/components/parameters/PostIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tagIds]
+              properties:
+                tagIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /comments:
+    get:
+      operationId: listComments
+      tags: [comments]
+      summary: List all comments
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: postId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: authorId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /comments/{commentId}:
+    get:
+      operationId: getComment
+      tags: [comments]
+      summary: Get a comment by ID
+      parameters:
+        - $ref: "#/components/parameters/CommentIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateComment
+      tags: [comments]
+      summary: Update a comment
+      parameters:
+        - $ref: "#/components/parameters/CommentIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteComment
+      tags: [comments]
+      summary: Delete a comment
+      parameters:
+        - $ref: "#/components/parameters/CommentIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /comments/{commentId}/replies:
+    get:
+      operationId: listCommentReplies
+      tags: [comments]
+      summary: List replies to a comment
+      parameters:
+        - $ref: "#/components/parameters/CommentIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Comment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: replyToComment
+      tags: [comments]
+      summary: Reply to a comment
+      parameters:
+        - $ref: "#/components/parameters/CommentIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List products
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            format: double
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            format: double
+        - name: inStock
+          in: query
+          schema:
+            type: boolean
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product by ID
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replaceProduct
+      tags: [products]
+      summary: Replace a product
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Partially update a product
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchProductRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/{productId}/reviews:
+    get:
+      operationId: listProductReviews
+      tags: [products, reviews]
+      summary: List reviews for a product
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: rating
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Review"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createProductReview
+      tags: [products, reviews]
+      summary: Create a review for a product
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReviewRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/{productId}/variants:
+    get:
+      operationId: listProductVariants
+      tags: [products]
+      summary: List product variants
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductVariant"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createProductVariant
+      tags: [products]
+      summary: Create a product variant
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductVariantRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductVariant"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/{productId}/variants/{variantId}:
+    get:
+      operationId: getProductVariant
+      tags: [products]
+      summary: Get a product variant
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+        - $ref: "#/components/parameters/VariantIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductVariant"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateProductVariant
+      tags: [products]
+      summary: Update a product variant
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+        - $ref: "#/components/parameters/VariantIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchProductVariantRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductVariant"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteProductVariant
+      tags: [products]
+      summary: Delete a product variant
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+        - $ref: "#/components/parameters/VariantIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/{productId}/images:
+    get:
+      operationId: listProductImages
+      tags: [products, media]
+      summary: List product images
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaAsset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: uploadProductImage
+      tags: [products, media]
+      summary: Upload a product image
+      parameters:
+        - $ref: "#/components/parameters/ProductIdParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                alt:
+                  type: string
+                position:
+                  type: integer
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List orders
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: createdAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: createdBefore
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get an order by ID
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateOrder
+      tags: [orders]
+      summary: Update an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchOrderRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteOrder
+      tags: [orders]
+      summary: Cancel and delete an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders/{orderId}/cancel:
+    post:
+      operationId: cancelOrder
+      tags: [orders]
+      summary: Cancel an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders/{orderId}/ship:
+    post:
+      operationId: shipOrder
+      tags: [orders]
+      summary: Mark order as shipped
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trackingNumber, carrier]
+              properties:
+                trackingNumber:
+                  type: string
+                carrier:
+                  type: string
+                  enum: [ups, fedex, usps, dhl]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders/{orderId}/refund:
+    post:
+      operationId: refundOrder
+      tags: [orders]
+      summary: Refund an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+                  format: double
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders/{orderId}/items:
+    get:
+      operationId: listOrderItems
+      tags: [orders]
+      summary: List items in an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderItem"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: addOrderItem
+      tags: [orders]
+      summary: Add an item to an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderItemRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders/{orderId}/items/{itemId}:
+    patch:
+      operationId: updateOrderItem
+      tags: [orders]
+      summary: Update an order item
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: removeOrderItem
+      tags: [orders]
+      summary: Remove an item from an order
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List categories
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - name: parentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: depth
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /categories/{categoryId}:
+    get:
+      operationId: getCategory
+      tags: [categories]
+      summary: Get a category by ID
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replaceCategory
+      tags: [categories]
+      summary: Replace a category
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update a category
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                parentId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete a category
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /categories/{categoryId}/products:
+    get:
+      operationId: listCategoryProducts
+      tags: [categories, products]
+      summary: List products in a category
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /categories/{categoryId}/subcategories:
+    get:
+      operationId: listSubcategories
+      tags: [categories]
+      summary: List subcategories
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /reviews:
+    get:
+      operationId: listReviews
+      tags: [reviews]
+      summary: List all reviews
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/SortParam"
+        - name: rating
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: verified
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Review"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /reviews/{reviewId}:
+    get:
+      operationId: getReview
+      tags: [reviews]
+      summary: Get a review by ID
+      parameters:
+        - $ref: "#/components/parameters/ReviewIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateReview
+      tags: [reviews]
+      summary: Update a review
+      parameters:
+        - $ref: "#/components/parameters/ReviewIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                title:
+                  type: string
+                body:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteReview
+      tags: [reviews]
+      summary: Delete a review
+      parameters:
+        - $ref: "#/components/parameters/ReviewIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /reviews/{reviewId}/helpful:
+    post:
+      operationId: markReviewHelpful
+      tags: [reviews]
+      summary: Mark a review as helpful
+      parameters:
+        - $ref: "#/components/parameters/ReviewIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /settings:
+    get:
+      operationId: listSettings
+      tags: [settings]
+      summary: List application settings
+      parameters:
+        - name: group
+          in: query
+          schema:
+            $ref: "#/components/schemas/SettingGroup"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Setting"
+    put:
+      operationId: bulkUpdateSettings
+      tags: [settings]
+      summary: Bulk update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/SettingUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Setting"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /settings/{settingKey}:
+    get:
+      operationId: getSetting
+      tags: [settings]
+      summary: Get a setting by key
+      parameters:
+        - name: settingKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateSetting
+      tags: [settings]
+      summary: Update a setting
+      parameters:
+        - name: settingKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: resetSetting
+      tags: [settings]
+      summary: Reset a setting to default
+      parameters:
+        - name: settingKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tags:
+    get:
+      operationId: listTags
+      tags: [tags]
+      summary: List tags
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Tag"
+    post:
+      operationId: createTag
+      tags: [tags]
+      summary: Create a tag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /tags/{tagId}:
+    get:
+      operationId: getTag
+      tags: [tags]
+      summary: Get a tag by ID
+      parameters:
+        - $ref: "#/components/parameters/TagIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateTag
+      tags: [tags]
+      summary: Update a tag
+      parameters:
+        - $ref: "#/components/parameters/TagIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteTag
+      tags: [tags]
+      summary: Delete a tag
+      parameters:
+        - $ref: "#/components/parameters/TagIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tags/{tagId}/posts:
+    get:
+      operationId: listTagPosts
+      tags: [tags, posts]
+      summary: List posts with a tag
+      parameters:
+        - $ref: "#/components/parameters/TagIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /media:
+    get:
+      operationId: listMedia
+      tags: [media]
+      summary: List media assets
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/MediaType"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MediaAsset"
+    post:
+      operationId: uploadMedia
+      tags: [media]
+      summary: Upload a media asset
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                alt:
+                  type: string
+                folder:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /media/{mediaId}:
+    get:
+      operationId: getMedia
+      tags: [media]
+      summary: Get a media asset by ID
+      parameters:
+        - $ref: "#/components/parameters/MediaIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateMedia
+      tags: [media]
+      summary: Update media metadata
+      parameters:
+        - $ref: "#/components/parameters/MediaIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                alt:
+                  type: string
+                folder:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteMedia
+      tags: [media]
+      summary: Delete a media asset
+      parameters:
+        - $ref: "#/components/parameters/MediaIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - name: read
+          in: query
+          schema:
+            type: boolean
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/NotificationType"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Notification"
+  /notifications/mark-all-read:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "204":
+          description: No Content
+  /notifications/{notificationId}:
+    get:
+      operationId: getNotification
+      tags: [notifications]
+      summary: Get a notification by ID
+      parameters:
+        - $ref: "#/components/parameters/NotificationIdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateNotification
+      tags: [notifications]
+      summary: Update notification read status
+      parameters:
+        - $ref: "#/components/parameters/NotificationIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                read:
+                  type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteNotification
+      tags: [notifications]
+      summary: Delete a notification
+      parameters:
+        - $ref: "#/components/parameters/NotificationIdParam"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Get analytics overview
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnalyticsPeriod"
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /analytics/sales:
+    get:
+      operationId: getSalesAnalytics
+      tags: [analytics]
+      summary: Get sales analytics
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnalyticsPeriod"
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesAnalytics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /analytics/users:
+    get:
+      operationId: getUserAnalytics
+      tags: [analytics]
+      summary: Get user analytics
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnalyticsPeriod"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAnalytics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /analytics/products/top:
+    get:
+      operationId: getTopProducts
+      tags: [analytics]
+      summary: Get top-selling products
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnalyticsPeriod"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductAnalytics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /analytics/export:
+    post:
+      operationId: exportAnalytics
+      tags: [analytics]
+      summary: Export analytics data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, period, format]
+              properties:
+                type:
+                  type: string
+                  enum: [sales, users, products, orders]
+                period:
+                  $ref: "#/components/schemas/AnalyticsPeriod"
+                format:
+                  type: string
+                  enum: [csv, xlsx, json]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downloadUrl:
+                    type: string
+                    format: uri
+                  expiresAt:
+                    type: string
+                    format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Authenticate a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh authentication token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout and invalidate token
+      responses:
+        "204":
+          description: No Content
+  /auth/password/reset:
+    post:
+      operationId: requestPasswordReset
+      tags: [auth]
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/password/reset/{token}:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Reset password with token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /search:
+    get:
+      operationId: globalSearch
+      tags: [posts, products]
+      summary: Global search across resources
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [all, posts, products, users]
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  version:
+                    type: string
+                  uptime:
+                    type: integer
+  /webhooks:
+    get:
+      operationId: listWebhooks
+      tags: [settings]
+      summary: List webhook configurations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Webhook"
+    post:
+      operationId: createWebhook
+      tags: [settings]
+      summary: Create a webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /webhooks/{webhookId}:
+    get:
+      operationId: getWebhook
+      tags: [settings]
+      summary: Get a webhook by ID
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateWebhook
+      tags: [settings]
+      summary: Update a webhook
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/WebhookEvent"
+                active:
+                  type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteWebhook
+      tags: [settings]
+      summary: Delete a webhook
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /webhooks/{webhookId}/test:
+    post:
+      operationId: testWebhook
+      tags: [settings]
+      summary: Send a test webhook
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  statusCode:
+                    type: integer
+                  responseTime:
+                    type: integer
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    SortParam:
+      name: sort
+      in: query
+      schema:
+        type: string
+        pattern: "^-?[a-zA-Z_]+$"
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PostIdParam:
+      name: postId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CommentIdParam:
+      name: commentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProductIdParam:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    VariantIdParam:
+      name: variantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrderIdParam:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryIdParam:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReviewIdParam:
+      name: reviewId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TagIdParam:
+      name: tagId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MediaIdParam:
+      name: mediaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationIdParam:
+      name: notificationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    BaseModel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+    PaginatedResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        hasMore:
+          type: boolean
+    UserRole:
+      type: string
+      enum: [admin, moderator, editor, user, guest]
+    AccountStatus:
+      type: string
+      enum: [active, inactive, suspended, pending]
+    User:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [email, name, role, status]
+          properties:
+            email:
+              type: string
+              format: email
+            name:
+              type: string
+            bio:
+              type: string
+            avatarUrl:
+              type: string
+              format: uri
+            role:
+              $ref: "#/components/schemas/UserRole"
+            status:
+              $ref: "#/components/schemas/AccountStatus"
+            lastLoginAt:
+              type: string
+              format: date-time
+    CreateUserRequest:
+      type: object
+      required: [email, name, password, role]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        bio:
+          type: string
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          $ref: "#/components/schemas/UserRole"
+    PatchUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        bio:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        status:
+          $ref: "#/components/schemas/AccountStatus"
+    UserSettings:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: [light, dark, system]
+        language:
+          type: string
+        timezone:
+          type: string
+        emailNotifications:
+          type: boolean
+        pushNotifications:
+          type: boolean
+        newsletter:
+          type: boolean
+        twoFactorEnabled:
+          type: boolean
+    PostStatus:
+      type: string
+      enum: [draft, published, archived, scheduled]
+    Post:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [title, slug, status, authorId]
+          properties:
+            title:
+              type: string
+            slug:
+              type: string
+            body:
+              type: string
+            excerpt:
+              type: string
+            status:
+              $ref: "#/components/schemas/PostStatus"
+            authorId:
+              type: string
+              format: uuid
+            author:
+              $ref: "#/components/schemas/User"
+            publishedAt:
+              type: string
+              format: date-time
+            tags:
+              type: array
+              items:
+                $ref: "#/components/schemas/Tag"
+            commentCount:
+              type: integer
+            featuredImage:
+              $ref: "#/components/schemas/MediaAsset"
+    CreatePostRequest:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        excerpt:
+          type: string
+        status:
+          $ref: "#/components/schemas/PostStatus"
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        featuredImageId:
+          type: string
+          format: uuid
+        scheduledAt:
+          type: string
+          format: date-time
+    PatchPostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        excerpt:
+          type: string
+        status:
+          $ref: "#/components/schemas/PostStatus"
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    Comment:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [body, authorId, postId]
+          properties:
+            body:
+              type: string
+            authorId:
+              type: string
+              format: uuid
+            author:
+              $ref: "#/components/schemas/User"
+            postId:
+              type: string
+              format: uuid
+            parentId:
+              type: string
+              format: uuid
+              nullable: true
+            replyCount:
+              type: integer
+    CreateCommentRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+    Product:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [name, slug, price, currency, status]
+          properties:
+            name:
+              type: string
+            slug:
+              type: string
+            description:
+              type: string
+            price:
+              type: number
+              format: double
+            compareAtPrice:
+              type: number
+              format: double
+              nullable: true
+            currency:
+              $ref: "#/components/schemas/Currency"
+            sku:
+              type: string
+            status:
+              $ref: "#/components/schemas/ProductStatus"
+            stockQuantity:
+              type: integer
+            categoryId:
+              type: string
+              format: uuid
+            category:
+              $ref: "#/components/schemas/Category"
+            images:
+              type: array
+              items:
+                $ref: "#/components/schemas/MediaAsset"
+            variants:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProductVariant"
+            averageRating:
+              type: number
+              format: double
+            reviewCount:
+              type: integer
+            weight:
+              type: number
+              format: double
+            dimensions:
+              $ref: "#/components/schemas/Dimensions"
+    CreateProductRequest:
+      type: object
+      required: [name, price, currency]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: double
+        compareAtPrice:
+          type: number
+          format: double
+        currency:
+          $ref: "#/components/schemas/Currency"
+        sku:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+        stockQuantity:
+          type: integer
+        categoryId:
+          type: string
+          format: uuid
+        weight:
+          type: number
+          format: double
+        dimensions:
+          $ref: "#/components/schemas/Dimensions"
+    PatchProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: double
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+        stockQuantity:
+          type: integer
+    ProductStatus:
+      type: string
+      enum: [active, inactive, draft, discontinued]
+    Currency:
+      type: string
+      enum: [USD, EUR, GBP, JPY, CAD, AUD]
+    Dimensions:
+      type: object
+      properties:
+        length:
+          type: number
+          format: double
+        width:
+          type: number
+          format: double
+        height:
+          type: number
+          format: double
+        unit:
+          type: string
+          enum: [cm, in]
+    ProductVariant:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [name, sku, price]
+          properties:
+            name:
+              type: string
+            sku:
+              type: string
+            price:
+              type: number
+              format: double
+            stockQuantity:
+              type: integer
+            attributes:
+              type: object
+              additionalProperties:
+                type: string
+    CreateProductVariantRequest:
+      type: object
+      required: [name, sku, price]
+      properties:
+        name:
+          type: string
+        sku:
+          type: string
+        price:
+          type: number
+          format: double
+        stockQuantity:
+          type: integer
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+    PatchProductVariantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+        stockQuantity:
+          type: integer
+    OrderStatus:
+      type: string
+      enum: [pending, confirmed, processing, shipped, delivered, cancelled, refunded]
+    Order:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [customerId, status, total, currency]
+          properties:
+            orderNumber:
+              type: string
+            customerId:
+              type: string
+              format: uuid
+            customer:
+              $ref: "#/components/schemas/User"
+            status:
+              $ref: "#/components/schemas/OrderStatus"
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OrderItem"
+            subtotal:
+              type: number
+              format: double
+            tax:
+              type: number
+              format: double
+            shipping:
+              type: number
+              format: double
+            total:
+              type: number
+              format: double
+            currency:
+              $ref: "#/components/schemas/Currency"
+            shippingAddress:
+              $ref: "#/components/schemas/Address"
+            billingAddress:
+              $ref: "#/components/schemas/Address"
+            trackingNumber:
+              type: string
+              nullable: true
+            carrier:
+              type: string
+              nullable: true
+            notes:
+              type: string
+    CreateOrderRequest:
+      type: object
+      required: [items, shippingAddress]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateOrderItemRequest"
+        shippingAddress:
+          $ref: "#/components/schemas/Address"
+        billingAddress:
+          $ref: "#/components/schemas/Address"
+        notes:
+          type: string
+    PatchOrderRequest:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        shippingAddress:
+          $ref: "#/components/schemas/Address"
+        notes:
+          type: string
+    OrderItem:
+      type: object
+      required: [productId, quantity, unitPrice]
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          $ref: "#/components/schemas/Product"
+        variantId:
+          type: string
+          format: uuid
+          nullable: true
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          type: number
+          format: double
+        total:
+          type: number
+          format: double
+    CreateOrderItemRequest:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+    Address:
+      type: object
+      required: [line1, city, state, postalCode, country]
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+    Category:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [name, slug]
+          properties:
+            name:
+              type: string
+            slug:
+              type: string
+            description:
+              type: string
+            parentId:
+              type: string
+              format: uuid
+              nullable: true
+            productCount:
+              type: integer
+            depth:
+              type: integer
+    CreateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+    Review:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [productId, authorId, rating, title, body]
+          properties:
+            productId:
+              type: string
+              format: uuid
+            authorId:
+              type: string
+              format: uuid
+            author:
+              $ref: "#/components/schemas/User"
+            rating:
+              type: integer
+              minimum: 1
+              maximum: 5
+            title:
+              type: string
+            body:
+              type: string
+            verified:
+              type: boolean
+            helpfulCount:
+              type: integer
+    CreateReviewRequest:
+      type: object
+      required: [rating, title, body]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        body:
+          type: string
+    Tag:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [name, slug]
+          properties:
+            name:
+              type: string
+            slug:
+              type: string
+            postCount:
+              type: integer
+    CreateTagRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+    MediaType:
+      type: string
+      enum: [image, video, document, audio]
+    MediaAsset:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [url, filename, mimeType, size]
+          properties:
+            url:
+              type: string
+              format: uri
+            filename:
+              type: string
+            mimeType:
+              type: string
+            size:
+              type: integer
+            alt:
+              type: string
+            width:
+              type: integer
+            height:
+              type: integer
+            folder:
+              type: string
+            type:
+              $ref: "#/components/schemas/MediaType"
+    NotificationType:
+      type: string
+      enum: [order_update, comment_reply, review_posted, system, promotion]
+    Notification:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [type, title, read]
+          properties:
+            type:
+              $ref: "#/components/schemas/NotificationType"
+            title:
+              type: string
+            body:
+              type: string
+            read:
+              type: boolean
+            actionUrl:
+              type: string
+              format: uri
+            data:
+              oneOf:
+                - $ref: "#/components/schemas/OrderNotificationData"
+                - $ref: "#/components/schemas/CommentNotificationData"
+                - $ref: "#/components/schemas/SystemNotificationData"
+    OrderNotificationData:
+      type: object
+      required: [kind, orderId, orderNumber]
+      properties:
+        kind:
+          type: string
+          enum: [order]
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+    CommentNotificationData:
+      type: object
+      required: [kind, commentId, postId]
+      properties:
+        kind:
+          type: string
+          enum: [comment]
+        commentId:
+          type: string
+          format: uuid
+        postId:
+          type: string
+          format: uuid
+        authorName:
+          type: string
+    SystemNotificationData:
+      type: object
+      required: [kind, level]
+      properties:
+        kind:
+          type: string
+          enum: [system]
+        level:
+          type: string
+          enum: [info, warning, critical]
+        component:
+          type: string
+    SettingGroup:
+      type: string
+      enum: [general, appearance, email, security, integrations, billing]
+    Setting:
+      type: object
+      required: [key, value, group, type]
+      properties:
+        key:
+          type: string
+        value:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: boolean
+        group:
+          $ref: "#/components/schemas/SettingGroup"
+        type:
+          type: string
+          enum: [string, integer, boolean, json]
+        description:
+          type: string
+        defaultValue:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: boolean
+    SettingUpdate:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+        value:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: boolean
+    AnalyticsPeriod:
+      type: string
+      enum: [today, yesterday, last7days, last30days, last90days, thisMonth, lastMonth, thisYear, custom]
+    AnalyticsOverview:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        newUsers:
+          type: integer
+        totalOrders:
+          type: integer
+        totalRevenue:
+          type: number
+          format: double
+        averageOrderValue:
+          type: number
+          format: double
+        conversionRate:
+          type: number
+          format: double
+    SalesAnalytics:
+      type: object
+      properties:
+        totalRevenue:
+          type: number
+          format: double
+        orderCount:
+          type: integer
+        averageOrderValue:
+          type: number
+          format: double
+        dataPoints:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              revenue:
+                type: number
+                format: double
+              orders:
+                type: integer
+    UserAnalytics:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        activeUsers:
+          type: integer
+        newSignups:
+          type: integer
+        churnRate:
+          type: number
+          format: double
+        retentionRate:
+          type: number
+          format: double
+    ProductAnalytics:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        unitsSold:
+          type: integer
+        revenue:
+          type: number
+          format: double
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+        tokenType:
+          type: string
+          enum: [Bearer]
+    SearchResults:
+      type: object
+      properties:
+        total:
+          type: integer
+        results:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/PostSearchResult"
+              - $ref: "#/components/schemas/ProductSearchResult"
+              - $ref: "#/components/schemas/UserSearchResult"
+    PostSearchResult:
+      type: object
+      required: [type, item]
+      properties:
+        type:
+          type: string
+          enum: [post]
+        score:
+          type: number
+          format: double
+        item:
+          $ref: "#/components/schemas/Post"
+    ProductSearchResult:
+      type: object
+      required: [type, item]
+      properties:
+        type:
+          type: string
+          enum: [product]
+        score:
+          type: number
+          format: double
+        item:
+          $ref: "#/components/schemas/Product"
+    UserSearchResult:
+      type: object
+      required: [type, item]
+      properties:
+        type:
+          type: string
+          enum: [user]
+        score:
+          type: number
+          format: double
+        item:
+          $ref: "#/components/schemas/User"
+    WebhookEvent:
+      type: string
+      enum:
+        - order.created
+        - order.updated
+        - order.cancelled
+        - order.shipped
+        - product.created
+        - product.updated
+        - product.deleted
+        - user.created
+        - user.updated
+        - review.created
+    Webhook:
+      allOf:
+        - $ref: "#/components/schemas/BaseModel"
+        - type: object
+          required: [url, events, active]
+          properties:
+            url:
+              type: string
+              format: uri
+            secret:
+              type: string
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/WebhookEvent"
+            active:
+              type: boolean
+            lastTriggeredAt:
+              type: string
+              format: date-time
+              nullable: true
+    CreateWebhookRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        active:
+          type: boolean
+          default: true

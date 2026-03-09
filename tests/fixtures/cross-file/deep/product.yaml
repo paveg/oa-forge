@@ -1,0 +1,21 @@
+openapi: "3.0.3"
+info:
+  title: Product Models
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Product:
+      type: object
+      required:
+        - sku
+        - name
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        category:
+          $ref: "./category.yaml#/components/schemas/Category"

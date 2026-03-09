@@ -2,10 +2,13 @@
 name = "oa-forge-ir"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Intermediate representation for oa-forge OpenAPI code generator"
 
 [dependencies]
-oa-forge-parser = { path = "../parser" }
+oa-forge-parser = { workspace = true }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
 thiserror = { workspace = true }

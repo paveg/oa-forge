@@ -1,0 +1,40 @@
+{
+  "name": "@oa-forge/cli",
+  "version": "0.1.0",
+  "description": "Fast and correct OpenAPI to TypeScript code generator",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paveg/oa-forge"
+  },
+  "bin": {
+    "oa-forge": "bin/oa-forge"
+  },
+  "files": [
+    "bin",
+    "scripts"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "optionalDependencies": {
+    "@oa-forge/cli-darwin-arm64": "0.1.0",
+    "@oa-forge/cli-darwin-x64": "0.1.0",
+    "@oa-forge/cli-linux-x64": "0.1.0",
+    "@oa-forge/cli-linux-arm64": "0.1.0",
+    "@oa-forge/cli-win32-x64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "openapi",
+    "typescript",
+    "codegen",
+    "swagger",
+    "tanstack-query",
+    "zod",
+    "valibot",
+    "msw"
+  ]
+}

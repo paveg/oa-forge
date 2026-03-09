@@ -1,0 +1,224 @@
+openapi: "3.0.3"
+info:
+  title: Edge Cases API
+  version: "1.0.0"
+paths:
+  /no-operation-id:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /empty-responses:
+    post:
+      operationId: emptyResponses
+      responses: {}
+  /all-void:
+    delete:
+      operationId: deleteAllVoid
+      responses:
+        "204":
+          description: No Content
+    put:
+      operationId: replaceAllVoid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: string
+      responses:
+        "204":
+          description: No Content
+  /no-param-schema:
+    get:
+      operationId: noParamSchema
+      parameters:
+        - name: filter
+          in: query
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+  /deeply-nested:
+    get:
+      operationId: deeplyNested
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeepWrapper"
+  /only-error-response:
+    get:
+      operationId: onlyErrorResponse
+      responses:
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /nullable-array:
+    get:
+      operationId: nullableArray
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                nullable: true
+  /enum-only-response:
+    get:
+      operationId: enumOnlyResponse
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                enum: ["active", "inactive", "pending"]
+  /empty-object-body:
+    post:
+      operationId: emptyObjectBody
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /text-response:
+    get:
+      operationId: textResponse
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+  /blob-response:
+    get:
+      operationId: blobResponse
+      responses:
+        "200":
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /multiple-success-codes:
+    post:
+      operationId: multipleSuccessCodes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  created:
+                    type: boolean
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+components:
+  schemas:
+    ErrorBody:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        code:
+          type: integer
+    DeepWrapper:
+      allOf:
+        - $ref: "#/components/schemas/DeepBase"
+        - type: object
+          properties:
+            extra:
+              type: string
+    DeepBase:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        nested:
+          $ref: "#/components/schemas/DeepChild"
+    DeepChild:
+      oneOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum: ["a"]
+            valueA:
+              type: number
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum: ["b"]
+            valueB:
+              type: boolean
+    EmptyEnum:
+      type: string
+      enum: []
+    SingleVariantUnion:
+      oneOf:
+        - type: string
+    MapOfArrays:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: integer

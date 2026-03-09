@@ -1,0 +1,143 @@
+openapi: "3.0.3"
+info:
+  title: Discriminator Test
+  version: "1.0.0"
+  description: Tests oneOf with discriminator and allOf+oneOf patterns
+paths:
+  /shapes:
+    get:
+      operationId: listShapes
+      responses:
+        "200":
+          description: List of shapes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shape"
+  /events:
+    get:
+      operationId: listEvents
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+  /notifications:
+    get:
+      operationId: listNotifications
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+components:
+  schemas:
+    # oneOf with discriminator (Orval #1316)
+    Shape:
+      oneOf:
+        - $ref: "#/components/schemas/Circle"
+        - $ref: "#/components/schemas/Square"
+      discriminator:
+        propertyName: kind
+        mapping:
+          circle: "#/components/schemas/Circle"
+          square: "#/components/schemas/Square"
+
+    Circle:
+      type: object
+      required:
+        - kind
+        - radius
+      properties:
+        kind:
+          type: string
+        radius:
+          type: number
+
+    Square:
+      type: object
+      required:
+        - kind
+        - side
+      properties:
+        kind:
+          type: string
+        side:
+          type: number
+
+    # allOf + oneOf (Orval #1526)
+    Event:
+      allOf:
+        - type: object
+          required:
+            - id
+            - timestamp
+          properties:
+            id:
+              type: string
+            timestamp:
+              type: string
+        - oneOf:
+            - $ref: "#/components/schemas/ClickEvent"
+            - $ref: "#/components/schemas/ViewEvent"
+          discriminator:
+            propertyName: type
+
+    ClickEvent:
+      type: object
+      required:
+        - type
+        - x
+        - y
+      properties:
+        type:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+
+    ViewEvent:
+      type: object
+      required:
+        - type
+        - page
+      properties:
+        type:
+          type: string
+        page:
+          type: string
+
+    # anyOf with nullable enum (Orval #2710)
+    Notification:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+        severity:
+          anyOf:
+            - $ref: "#/components/schemas/SeverityLevel"
+            - type: string
+              enum:
+                - custom
+          nullable: true
+
+    SeverityLevel:
+      type: string
+      enum:
+        - low
+        - medium
+        - high
+        - critical

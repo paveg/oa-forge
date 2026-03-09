@@ -2,6 +2,7 @@
 name = "oa-forge"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Fast and correct OpenAPI to TypeScript code generator"
@@ -11,12 +12,33 @@ name = "oa-forge"
 path = "src/main.rs"
 
 [dependencies]
-oa-forge-parser = { path = "../parser" }
-oa-forge-ir = { path = "../ir" }
-oa-forge-emitter-types = { path = "../emitter-types" }
-oa-forge-emitter-client = { path = "../emitter-client" }
-oa-forge-emitter-query = { path = "../emitter-query" }
-oa-forge-formatter = { path = "../formatter" }
+oa-forge-parser = { workspace = true }
+oa-forge-ir = { workspace = true }
+oa-forge-emitter-types = { workspace = true }
+oa-forge-emitter-client = { workspace = true }
+oa-forge-emitter-query = { workspace = true }
+oa-forge-emitter-zod = { workspace = true }
+oa-forge-emitter-valibot = { workspace = true }
+oa-forge-emitter-msw = { workspace = true }
+oa-forge-emitter-mock = { workspace = true }
+oa-forge-emitter-axios = { workspace = true }
+oa-forge-emitter-hono = { workspace = true }
+oa-forge-emitter-angular = { workspace = true }
+oa-forge-formatter = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 rayon = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+notify = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+criterion = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+[[bench]]
+name = "codegen"
+harness = false

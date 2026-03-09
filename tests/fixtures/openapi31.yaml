@@ -1,0 +1,93 @@
+openapi: "3.1.0"
+info:
+  title: OpenAPI 3.1 Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Item"
+  /items/{itemId}:
+    get:
+      operationId: getItem
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+  /coordinates:
+    post:
+      operationId: createCoordinate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Coordinate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coordinate"
+components:
+  schemas:
+    Item:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        metadata:
+          anyOf:
+            - $ref: "#/components/schemas/Metadata"
+            - type: "null"
+    Metadata:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+    Coordinate:
+      type: array
+      prefixItems:
+        - type: number
+        - type: number
+        - type: number
+    NullableId:
+      type: ["integer", "null"]
+    Status:
+      type: string
+      enum:
+        - active
+        - inactive
+        - null
