@@ -1,0 +1,11 @@
+[package]
+name = "oa-forge-ir"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oa-forge-parser = { path = "../parser" }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+thiserror = { workspace = true }

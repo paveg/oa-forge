@@ -1,0 +1,22 @@
+[package]
+name = "oa-forge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Fast and correct OpenAPI to TypeScript code generator"
+
+[[bin]]
+name = "oa-forge"
+path = "src/main.rs"
+
+[dependencies]
+oa-forge-parser = { path = "../parser" }
+oa-forge-ir = { path = "../ir" }
+oa-forge-emitter-types = { path = "../emitter-types" }
+oa-forge-emitter-client = { path = "../emitter-client" }
+oa-forge-emitter-query = { path = "../emitter-query" }
+oa-forge-formatter = { path = "../formatter" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+rayon = { workspace = true }

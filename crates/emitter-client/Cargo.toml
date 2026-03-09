@@ -1,0 +1,8 @@
+[package]
+name = "oa-forge-emitter-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oa-forge-ir = { path = "../ir" }

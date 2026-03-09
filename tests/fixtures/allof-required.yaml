@@ -1,0 +1,54 @@
+openapi: "3.0.3"
+info:
+  title: allOf Required Propagation Test
+  version: "1.0.0"
+  description: |
+    Tests that required fields defined at schema root correctly propagate
+    into allOf member properties. This is the bug described in Orval #1570.
+paths:
+  /users:
+    post:
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+components:
+  schemas:
+    BaseUser:
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: number
+    CreateUser:
+      required:
+        - name
+        - email
+      allOf:
+        - $ref: "#/components/schemas/BaseUser"
+        - type: object
+          properties:
+            email:
+              type: string
+    User:
+      allOf:
+        - $ref: "#/components/schemas/BaseUser"
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              type: integer
+            email:
+              type: string
