@@ -100,7 +100,14 @@ jobs:
         run: |
           for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-x64 cli-linux-arm64 cli-win32-x64; do
             cd "npm/$pkg"
-            npm publish --access public || true
+            npm publish --access public 2>&1 || {
+              if npm publish --access public 2>&1 | grep -q "already exists"; then
+                echo "⏭ $pkg already published, skipping"
+              else
+                echo "❌ Failed to publish $pkg"
+                exit 1
+              fi
+            }
             cd ../..
           done
 
@@ -124,20 +131,42 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish -p oa-forge-ir --allow-dirty || true
-          cargo publish -p oa-forge-parser --allow-dirty || true
-          cargo publish -p oa-forge-formatter --allow-dirty || true
-          cargo publish -p oa-forge-emitter-types --allow-dirty || true
-          cargo publish -p oa-forge-emitter-client --allow-dirty || true
-          cargo publish -p oa-forge-emitter-query --allow-dirty || true
-          cargo publish -p oa-forge-emitter-zod --allow-dirty || true
-          cargo publish -p oa-forge-emitter-valibot --allow-dirty || true
-          cargo publish -p oa-forge-emitter-msw --allow-dirty || true
-          cargo publish -p oa-forge-emitter-mock --allow-dirty || true
-          cargo publish -p oa-forge-emitter-axios --allow-dirty || true
-          cargo publish -p oa-forge-emitter-hono --allow-dirty || true
-          cargo publish -p oa-forge-emitter-angular --allow-dirty || true
-          cargo publish -p oa-forge --allow-dirty || true
+          publish_crate() {
+            local crate="$1"
+            echo "Publishing $crate..."
+            if cargo publish -p "$crate" 2>&1 | tee /tmp/publish.log; then
+              echo "✅ $crate published"
+            elif grep -q "already exists" /tmp/publish.log; then
+              echo "⏭ $crate already published, skipping"
+            else
+              echo "❌ Failed to publish $crate"
+              cat /tmp/publish.log
+              return 1
+            fi
+            sleep 5
+          }
+
+          # Leaf crates (no internal deps)
+          publish_crate oa-forge-parser
+          publish_crate oa-forge-formatter
+
+          # IR (depends on parser)
+          publish_crate oa-forge-ir
+
+          # Emitters (depend on IR)
+          publish_crate oa-forge-emitter-types
+          publish_crate oa-forge-emitter-client
+          publish_crate oa-forge-emitter-query
+          publish_crate oa-forge-emitter-zod
+          publish_crate oa-forge-emitter-valibot
+          publish_crate oa-forge-emitter-msw
+          publish_crate oa-forge-emitter-mock
+          publish_crate oa-forge-emitter-axios
+          publish_crate oa-forge-emitter-hono
+          publish_crate oa-forge-emitter-angular
+
+          # CLI (depends on all above)
+          publish_crate oa-forge
 
   github-release:
     name: GitHub Release

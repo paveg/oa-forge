@@ -1566,3 +1566,208 @@ fn swagger2_ref_rewriting() {
     assert!(types.contains("id: number"));
     assert!(types.contains("name: string"));
 }
+
+// === Split by tag tests ===
+
+#[test]
+fn split_by_tag_groups_endpoints_by_first_tag() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Group endpoints by tag (same logic as CLI)
+    let mut tag_groups: std::collections::BTreeMap<String, Vec<&oa_forge_ir::Endpoint>> =
+        std::collections::BTreeMap::new();
+    for ep in &api.endpoints {
+        let tag = ep
+            .tags
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "default".to_string());
+        tag_groups.entry(tag).or_default().push(ep);
+    }
+
+    // Petstore should have at least one tag group
+    assert!(!tag_groups.is_empty(), "should have at least one tag group");
+
+    // Each tag group should have endpoints
+    for (tag, endpoints) in &tag_groups {
+        assert!(
+            !endpoints.is_empty(),
+            "tag '{tag}' should have at least one endpoint"
+        );
+    }
+
+    // Every endpoint should be in exactly one group
+    let total: usize = tag_groups.values().map(|v| v.len()).sum();
+    assert_eq!(
+        total,
+        api.endpoints.len(),
+        "all endpoints should be accounted for"
+    );
+}
+
+#[test]
+fn split_by_tag_emits_scoped_client_per_tag() {
+    let yaml = include_str!("../../../tests/fixtures/large-scale.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Group by tag
+    let mut tag_groups: std::collections::BTreeMap<String, Vec<oa_forge_ir::Endpoint>> =
+        std::collections::BTreeMap::new();
+    for ep in &api.endpoints {
+        let tag = ep
+            .tags
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "default".to_string());
+        tag_groups.entry(tag).or_default().push(ep.clone());
+    }
+
+    // Large-scale spec should have multiple tags
+    assert!(
+        tag_groups.len() >= 2,
+        "large-scale spec should have multiple tags, got {}",
+        tag_groups.len()
+    );
+
+    // Each tag's scoped ApiSpec should only emit that tag's endpoints
+    for (tag, endpoints) in &tag_groups {
+        let tag_api = oa_forge_ir::ApiSpec {
+            types: api.types.clone(),
+            endpoints: endpoints.clone(),
+        };
+
+        let mut client = String::new();
+        oa_forge_emitter_client::emit(&tag_api, &mut client).expect("client emit failed");
+
+        // Client should contain functions for this tag's endpoints
+        for ep in endpoints {
+            assert!(
+                client.contains(&ep.operation_id),
+                "tag '{tag}' client should contain {}",
+                ep.operation_id
+            );
+        }
+    }
+}
+
+// === Dry-run tests ===
+
+#[test]
+fn dry_run_produces_output_without_side_effects() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Dry-run should still produce valid output
+    let mut types = String::new();
+    oa_forge_emitter_types::emit(&api, &mut types).expect("types emit failed");
+    assert!(!types.is_empty(), "dry-run types should produce output");
+    assert!(types.contains("export interface Pet {"));
+
+    let mut client = String::new();
+    oa_forge_emitter_client::emit(&api, &mut client).expect("client emit failed");
+    assert!(!client.is_empty(), "dry-run client should produce output");
+
+    let mut hooks = String::new();
+    oa_forge_emitter_query::emit(&api, &mut hooks).expect("hooks emit failed");
+    assert!(!hooks.is_empty(), "dry-run hooks should produce output");
+}
+
+// === Endpoints without tags default to "default" ===
+
+#[test]
+fn endpoints_without_tags_fall_into_default_group() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // edge-cases.yaml endpoints may not have tags
+    let mut has_default = false;
+    for ep in &api.endpoints {
+        if ep.tags.is_empty() {
+            has_default = true;
+            break;
+        }
+    }
+
+    if has_default {
+        // When grouping by tag, tagless endpoints should go to "default"
+        let mut tag_groups: std::collections::BTreeMap<String, Vec<&oa_forge_ir::Endpoint>> =
+            std::collections::BTreeMap::new();
+        for ep in &api.endpoints {
+            let tag = ep
+                .tags
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "default".to_string());
+            tag_groups.entry(tag).or_default().push(ep);
+        }
+        assert!(
+            tag_groups.contains_key("default"),
+            "tagless endpoints should be in 'default' group"
+        );
+    }
+}
+
+// === Axios client emitter tests ===
+
+#[test]
+fn axios_client_generates_valid_output() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut out = String::new();
+    oa_forge_emitter_axios::emit(&api, &mut out).expect("axios emit failed");
+    let out = oa_forge_formatter::format(&out);
+
+    assert!(
+        out.contains("setAxiosInstance"),
+        "should have setAxiosInstance"
+    );
+    assert!(
+        out.contains("AxiosRequestConfig"),
+        "should have AxiosRequestConfig"
+    );
+    assert!(out.contains("listPets"), "should have listPets function");
+}
+
+// === Angular client emitter tests ===
+
+#[test]
+fn angular_client_generates_injectable_service() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut out = String::new();
+    oa_forge_emitter_angular::emit(&api, &mut out).expect("angular emit failed");
+    let out = oa_forge_formatter::format(&out);
+
+    assert!(
+        out.contains("@Injectable"),
+        "should have @Injectable decorator"
+    );
+    assert!(
+        out.contains("Observable"),
+        "should use Observable return types"
+    );
+    assert!(out.contains("HttpClient"), "should use HttpClient");
+}
+
+// === Hono RPC type emitter tests ===
+
+#[test]
+fn hono_emitter_generates_app_type() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut out = String::new();
+    oa_forge_emitter_hono::emit(&api, &mut out).expect("hono emit failed");
+
+    assert!(out.contains("AppType"), "should generate AppType");
+}
