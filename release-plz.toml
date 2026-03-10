@@ -1,0 +1,77 @@
+# release-plz configuration
+# https://release-plz.ieni.dev/docs/config
+
+[workspace]
+# Use git-cliff for changelog generation
+changelog_config = "cliff.toml"
+# Create a single release PR for all crates
+pr_draft = false
+# Publish in dependency order (release-plz handles this automatically)
+publish_timeout = "30m"
+# Allow initial dev releases (0.x)
+allow_dirty = false
+# Semver check to catch breaking changes
+semver_check = true
+
+# Don't release internal crates individually — use workspace release
+# release-plz auto-detects workspace members and publishes in order
+
+# CLI is the "main" package for GitHub releases
+[[package]]
+name = "oa-forge"
+# This is the package that gets the git tag
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+
+# All other crates: publish to crates.io but no individual git tags
+[[package]]
+name = "oa-forge-parser"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-formatter"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-ir"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-types"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-client"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-query"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-zod"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-valibot"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-msw"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-mock"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-axios"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-hono"
+git_tag_enable = false
+
+[[package]]
+name = "oa-forge-emitter-angular"
+git_tag_enable = false
