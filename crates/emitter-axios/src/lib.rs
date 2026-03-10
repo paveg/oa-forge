@@ -9,14 +9,20 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
 
     emit_type_imports(api, out)?;
 
-    writeln!(out, "import type {{ AxiosInstance, AxiosRequestConfig }} from 'axios';")?;
+    writeln!(
+        out,
+        "import type {{ AxiosInstance, AxiosRequestConfig }} from 'axios';"
+    )?;
     writeln!(out, "import axios from 'axios';")?;
     writeln!(out)?;
 
     // Default instance
     writeln!(out, "let _instance: AxiosInstance = axios.create();")?;
     writeln!(out)?;
-    writeln!(out, "export function setAxiosInstance(instance: AxiosInstance) {{")?;
+    writeln!(
+        out,
+        "export function setAxiosInstance(instance: AxiosInstance) {{"
+    )?;
     writeln!(out, "  _instance = instance;")?;
     writeln!(out, "}}")?;
     writeln!(out)?;
@@ -38,8 +44,14 @@ fn emit_type_imports(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Er
 
     for endpoint in &api.endpoints {
         let id = &endpoint.operation_id;
-        let has_path = endpoint.parameters.iter().any(|p| p.location == ParamLocation::Path);
-        let has_query = endpoint.parameters.iter().any(|p| p.location == ParamLocation::Query);
+        let has_path = endpoint
+            .parameters
+            .iter()
+            .any(|p| p.location == ParamLocation::Path);
+        let has_query = endpoint
+            .parameters
+            .iter()
+            .any(|p| p.location == ParamLocation::Query);
 
         if has_path {
             imports.push(format!("{id}PathParams"));
@@ -56,7 +68,11 @@ fn emit_type_imports(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Er
     }
 
     if !imports.is_empty() {
-        writeln!(out, "import type {{ {} }} from './types.gen';", imports.join(", "))?;
+        writeln!(
+            out,
+            "import type {{ {} }} from './types.gen';",
+            imports.join(", ")
+        )?;
     }
 
     Ok(())
@@ -71,22 +87,40 @@ fn emit_build_query(out: &mut String) -> Result<(), std::fmt::Error> {
     writeln!(out, "): string {{")?;
     writeln!(out, "  if (!params) return '';")?;
     writeln!(out, "  const parts: string[] = [];")?;
-    writeln!(out, "  for (const [key, value] of Object.entries(params)) {{")?;
+    writeln!(
+        out,
+        "  for (const [key, value] of Object.entries(params)) {{"
+    )?;
     writeln!(out, "    if (value === undefined) continue;")?;
     writeln!(out, "    if (Array.isArray(value)) {{")?;
     writeln!(out, "      const style = arrayStyles?.[key] ?? 'multi';")?;
     writeln!(out, "      if (style === 'comma') {{")?;
-    writeln!(out, "        parts.push(`${{encodeURIComponent(key)}}=${{value.map(v => encodeURIComponent(String(v))).join(',')}}`);")?;
+    writeln!(
+        out,
+        "        parts.push(`${{encodeURIComponent(key)}}=${{value.map(v => encodeURIComponent(String(v))).join(',')}}`);"
+    )?;
     writeln!(out, "      }} else if (style === 'brackets') {{")?;
-    writeln!(out, "        for (const v of value) parts.push(`${{encodeURIComponent(key + '[]')}}=${{encodeURIComponent(String(v))}}`);")?;
+    writeln!(
+        out,
+        "        for (const v of value) parts.push(`${{encodeURIComponent(key + '[]')}}=${{encodeURIComponent(String(v))}}`);"
+    )?;
     writeln!(out, "      }} else {{")?;
-    writeln!(out, "        for (const v of value) parts.push(`${{encodeURIComponent(key)}}=${{encodeURIComponent(String(v))}}`);")?;
+    writeln!(
+        out,
+        "        for (const v of value) parts.push(`${{encodeURIComponent(key)}}=${{encodeURIComponent(String(v))}}`);"
+    )?;
     writeln!(out, "      }}")?;
     writeln!(out, "    }} else {{")?;
-    writeln!(out, "      parts.push(`${{encodeURIComponent(key)}}=${{encodeURIComponent(String(value))}}`);")?;
+    writeln!(
+        out,
+        "      parts.push(`${{encodeURIComponent(key)}}=${{encodeURIComponent(String(value))}}`);"
+    )?;
     writeln!(out, "    }}")?;
     writeln!(out, "  }}")?;
-    writeln!(out, "  return parts.length > 0 ? '?' + parts.join('&') : '';")?;
+    writeln!(
+        out,
+        "  return parts.length > 0 ? '?' + parts.join('&') : '';"
+    )?;
     writeln!(out, "}}")?;
     writeln!(out)?;
     Ok(())
@@ -102,8 +136,14 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
         HttpMethod::Delete => "delete",
     };
 
-    let has_path = endpoint.parameters.iter().any(|p| p.location == ParamLocation::Path);
-    let has_query = endpoint.parameters.iter().any(|p| p.location == ParamLocation::Query);
+    let has_path = endpoint
+        .parameters
+        .iter()
+        .any(|p| p.location == ParamLocation::Path);
+    let has_query = endpoint
+        .parameters
+        .iter()
+        .any(|p| p.location == ParamLocation::Query);
     let has_body = endpoint.request_body.is_some();
 
     let mut params = Vec::new();
@@ -174,9 +214,15 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
         let body_expr = match endpoint.request_content_type {
             ContentType::FormData => {
                 writeln!(out, "  const fd = new FormData();")?;
-                writeln!(out, "  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {{")?;
+                writeln!(
+                    out,
+                    "  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {{"
+                )?;
                 writeln!(out, "    if (v instanceof Blob) fd.append(k, v);")?;
-                writeln!(out, "    else if (v !== undefined) fd.append(k, String(v));")?;
+                writeln!(
+                    out,
+                    "    else if (v !== undefined) fd.append(k, String(v));"
+                )?;
                 writeln!(out, "  }}")?;
                 "fd"
             }
@@ -187,7 +233,10 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
             out,
             "  const {{ data }} = await _instance.{method}<{return_type}>(`{url_with_query}`, {body_expr}{response_type_hint});"
         )?;
-    } else if matches!(endpoint.method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch) {
+    } else if matches!(
+        endpoint.method,
+        HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
+    ) {
         writeln!(
             out,
             "  const {{ data }} = await _instance.{method}<{return_type}>(`{url_with_query}`, undefined{response_type_hint});"

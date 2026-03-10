@@ -1525,9 +1525,7 @@ skip = true
         overrides["GET /pets"]["operation_id"].as_str().unwrap(),
         "fetchAllPets"
     );
-    assert!(
-        overrides["DELETE /pets/{petId}"]["skip"].as_bool().unwrap()
-    );
+    assert!(overrides["DELETE /pets/{petId}"]["skip"].as_bool().unwrap());
 }
 
 // === Swagger 2.0 compatibility tests ===

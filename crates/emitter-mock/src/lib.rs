@@ -50,10 +50,7 @@ fn emit_mock_factory(typedef: &TypeDef, out: &mut String) -> Result<(), std::fmt
                     EnumValue::Integer(n) => n.to_string(),
                 })
                 .collect();
-            writeln!(
-                out,
-                "export function mock{name}(): Types.{name} {{"
-            )?;
+            writeln!(out, "export function mock{name}(): Types.{name} {{")?;
             writeln!(
                 out,
                 "  return faker.helpers.arrayElement([{}]) as Types.{name};",
@@ -105,7 +102,9 @@ fn type_repr_to_faker(repr: &TypeRepr, description: Option<&str>) -> String {
         }
         TypeRepr::Array { items } => {
             let inner = type_repr_to_faker(items, None);
-            format!("Array.from({{ length: faker.number.int({{ min: 1, max: 3 }}) }}, () => {inner})")
+            format!(
+                "Array.from({{ length: faker.number.int({{ min: 1, max: 3 }}) }}, () => {inner})"
+            )
         }
         TypeRepr::Ref { name } => {
             format!("mock{name}()")
@@ -142,10 +141,7 @@ fn type_repr_to_faker(repr: &TypeRepr, description: Option<&str>) -> String {
             if exprs.len() == 1 {
                 return exprs[0].clone();
             }
-            format!(
-                "faker.helpers.arrayElement([{}])",
-                exprs.join(", ")
-            )
+            format!("faker.helpers.arrayElement([{}])", exprs.join(", "))
         }
         TypeRepr::Tuple { items } => {
             let parts: Vec<String> = items.iter().map(|i| type_repr_to_faker(i, None)).collect();

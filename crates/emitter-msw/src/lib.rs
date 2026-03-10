@@ -75,30 +75,24 @@ fn emit_handler_function(endpoint: &Endpoint, out: &mut String) -> Result<(), st
     // Generate response based on response type
     match endpoint.response_type {
         ResponseType::Void => {
-            writeln!(
-                out,
-                "    return new HttpResponse(null, {{ status: 204 }});"
-            )?;
+            writeln!(out, "    return new HttpResponse(null, {{ status: 204 }});")?;
         }
         ResponseType::Text => {
-            writeln!(out, "    const data = typeof override === 'function' ? override() : override;")?;
             writeln!(
                 out,
-                "    return HttpResponse.text(data as string ?? '');"
+                "    const data = typeof override === 'function' ? override() : override;"
             )?;
+            writeln!(out, "    return HttpResponse.text(data as string ?? '');")?;
         }
         ResponseType::Blob => {
-            writeln!(
-                out,
-                "    return new HttpResponse(null, {{ status: 200 }});"
-            )?;
+            writeln!(out, "    return new HttpResponse(null, {{ status: 200 }});")?;
         }
         ResponseType::Json => {
-            writeln!(out, "    const data = typeof override === 'function' ? override() : override;")?;
             writeln!(
                 out,
-                "    return HttpResponse.json(data ?? {{}});"
+                "    const data = typeof override === 'function' ? override() : override;"
             )?;
+            writeln!(out, "    return HttpResponse.json(data ?? {{}});")?;
         }
     }
 

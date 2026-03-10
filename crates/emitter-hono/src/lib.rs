@@ -64,11 +64,7 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
 
             // Output type
             if let Some(_response) = &ep.response {
-                writeln!(
-                    out,
-                    "      output: Types.{}Response;",
-                    ep.operation_id
-                )?;
+                writeln!(out, "      output: Types.{}Response;", ep.operation_id)?;
             } else {
                 writeln!(out, "      output: void;")?;
             }

@@ -110,7 +110,13 @@ fn convert_operation(
     let mut new_op = serde_yaml::Mapping::new();
 
     // Pass through simple fields
-    for key in &["summary", "description", "operationId", "tags", "deprecated"] {
+    for key in &[
+        "summary",
+        "description",
+        "operationId",
+        "tags",
+        "deprecated",
+    ] {
         if let Some(v) = op.get(val(key)) {
             new_op.insert(val(key), v.clone());
         }
@@ -153,8 +159,7 @@ fn convert_operation(
                             prop_schema.insert(val("format"), f.clone());
                         }
 
-                        form_data_props
-                            .insert(val(name), Value::Mapping(prop_schema));
+                        form_data_props.insert(val(name), Value::Mapping(prop_schema));
                         if required {
                             form_data_required.push(val(name));
                         }
@@ -301,20 +306,13 @@ definitions:
         .unwrap();
 
         let openapi = convert_to_openapi3(swagger).unwrap();
-        let schemas = openapi
-            .get("components")
-            .unwrap()
-            .get("schemas")
-            .unwrap();
+        let schemas = openapi.get("components").unwrap().get("schemas").unwrap();
         assert!(schemas.get("Pet").is_some());
     }
 
     #[test]
     fn rewrites_definition_refs() {
-        let value = serde_yaml::from_str::<Value>(
-            r##"{"$ref": "#/definitions/Pet"}"##,
-        )
-        .unwrap();
+        let value = serde_yaml::from_str::<Value>(r##"{"$ref": "#/definitions/Pet"}"##).unwrap();
         let rewritten = rewrite_definition_refs(value);
         assert_eq!(
             rewritten.get("$ref").unwrap().as_str().unwrap(),
