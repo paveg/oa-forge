@@ -1,14 +1,14 @@
 use indexmap::IndexMap;
 
 /// The top-level intermediate representation of an API.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ApiSpec {
     pub types: IndexMap<String, TypeDef>,
     pub endpoints: Vec<Endpoint>,
 }
 
 /// A named type definition (from components/schemas).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeDef {
     pub name: String,
     pub description: Option<String>,
@@ -90,7 +90,7 @@ pub enum EnumValue {
     Integer(i64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Endpoint {
     pub path: String,
     pub method: HttpMethod,

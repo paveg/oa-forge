@@ -102,7 +102,7 @@ output = "./src/api"
 client = "fetch"      # "fetch" | "axios" | "hono" | "angular"
 hooks = true
 zod = true            # Generate Zod schemas
-split = "single"      # "single" | "endpoint"
+split = "single"      # "single" | "tag" | "endpoint"
 ```
 
 ### More examples
@@ -122,6 +122,9 @@ oa-forge generate --input openapi.yaml --output src/api --msw --mock
 
 # Watch mode — regenerate on spec changes
 oa-forge generate --input openapi.yaml --output src/api --hooks --watch
+
+# Split output by tag (one directory per API tag)
+oa-forge generate --input openapi.yaml --output src/api --hooks --split tag
 
 # Split output by endpoint (one file per operation)
 oa-forge generate --input openapi.yaml --output src/api --hooks --split endpoint
@@ -167,7 +170,7 @@ oa-forge generate --input openapi.yaml --output src/api --hooks --split endpoint
 - Config: TOML, JSON, TypeScript
 - Per-endpoint overrides (skip, rename operationId)
 - Watch mode with debounce
-- Split modes: single file, by endpoint
+- Split modes: single file, by tag, by endpoint
 - Incremental generation (content hash skip)
 - Dry-run mode
 
