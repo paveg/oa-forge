@@ -3047,21 +3047,14 @@ paths:
 
     // Check that intersection type is produced
     let endpoint = api.endpoints.first().unwrap();
-    if let Some(ref resp) = endpoint.response {
-        match resp {
-            oa_forge_ir::TypeRepr::Intersection { .. } => {
-                // Generate mock
-                let mut mock = String::new();
-                oa_forge_emitter_mock::emit(&api, &mut mock).expect("mock emit failed");
-                assert!(
-                    mock.contains("as any"),
-                    "mock intersection should use 'as any' spread: {mock}"
-                );
-            }
-            _ => {
-                // If allOf was flattened, that's also valid
-            }
-        }
+    if let Some(oa_forge_ir::TypeRepr::Intersection { .. }) = &endpoint.response {
+        // Generate mock
+        let mut mock = String::new();
+        oa_forge_emitter_mock::emit(&api, &mut mock).expect("mock emit failed");
+        assert!(
+            mock.contains("as any"),
+            "mock intersection should use 'as any' spread: {mock}"
+        );
     }
 }
 
