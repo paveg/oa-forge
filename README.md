@@ -1,6 +1,10 @@
-# oa-forge
+<p align="center">
+  <img src="assets/banner.png" alt="oa-forge" width="700" />
+</p>
 
-Fast and correct OpenAPI → TypeScript code generator, built in Rust.
+<p align="center">
+  Fast and correct OpenAPI → TypeScript code generator, built in Rust.
+</p>
 
 ## Why oa-forge?
 
