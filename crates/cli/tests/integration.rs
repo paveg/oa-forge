@@ -11,7 +11,12 @@ fn run_pipeline(yaml: &str) -> (String, String, String) {
     let types = oa_forge_formatter::format(&types);
 
     let mut client = String::new();
-    oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).expect("client emit failed");
+    oa_forge_emitter_client::emit(
+        &api,
+        &oa_forge_emitter_client::ClientStyle::Fetch,
+        &mut client,
+    )
+    .expect("client emit failed");
     let client = oa_forge_formatter::format(&client);
 
     let mut hooks = String::new();
@@ -1012,7 +1017,12 @@ fn run_pipeline_with_framework(
     let types = oa_forge_formatter::format(&types);
 
     let mut client = String::new();
-    oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).expect("client emit failed");
+    oa_forge_emitter_client::emit(
+        &api,
+        &oa_forge_emitter_client::ClientStyle::Fetch,
+        &mut client,
+    )
+    .expect("client emit failed");
     let client = oa_forge_formatter::format(&client);
 
     let mut hooks = String::new();
@@ -1343,8 +1353,12 @@ fn split_by_endpoint_creates_per_operation_files() {
         oa_forge_emitter_types::emit_endpoint(ep, &mut types_out).expect("endpoint types failed");
 
         let mut client_out = String::new();
-        oa_forge_emitter_client::emit_endpoint(ep, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client_out)
-            .expect("endpoint client failed");
+        oa_forge_emitter_client::emit_endpoint(
+            ep,
+            &oa_forge_emitter_client::ClientStyle::Fetch,
+            &mut client_out,
+        )
+        .expect("endpoint client failed");
 
         assert!(
             !types_out.is_empty() || !client_out.is_empty(),
@@ -1640,7 +1654,12 @@ fn split_by_tag_emits_scoped_client_per_tag() {
         };
 
         let mut client = String::new();
-        oa_forge_emitter_client::emit(&tag_api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).expect("client emit failed");
+        oa_forge_emitter_client::emit(
+            &tag_api,
+            &oa_forge_emitter_client::ClientStyle::Fetch,
+            &mut client,
+        )
+        .expect("client emit failed");
 
         // Client should contain functions for this tag's endpoints
         for ep in endpoints {
@@ -1668,7 +1687,12 @@ fn dry_run_produces_output_without_side_effects() {
     assert!(types.contains("export interface Pet {"));
 
     let mut client = String::new();
-    oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).expect("client emit failed");
+    oa_forge_emitter_client::emit(
+        &api,
+        &oa_forge_emitter_client::ClientStyle::Fetch,
+        &mut client,
+    )
+    .expect("client emit failed");
     assert!(!client.is_empty(), "dry-run client should produce output");
 
     let mut hooks = String::new();

@@ -168,7 +168,10 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
 
     // Merge headers into config if we have custom headers
     let config_expr = if let Some(ref h) = headers_expr {
-        writeln!(out, "  const _config: AxiosRequestConfig = {{ ...config, headers: {{ ...config?.headers, {h} }} }};")?;
+        writeln!(
+            out,
+            "  const _config: AxiosRequestConfig = {{ ...config, headers: {{ ...config?.headers, {h} }} }};"
+        )?;
         "_config"
     } else {
         "config"

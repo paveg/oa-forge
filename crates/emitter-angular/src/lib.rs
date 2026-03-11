@@ -88,14 +88,8 @@ fn emit_method(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Er
             out,
             "          for (const v of value) params = params.append(key, String(v));"
         )?;
-        writeln!(
-            out,
-            "        }} else if (value !== undefined) {{"
-        )?;
-        writeln!(
-            out,
-            "          params = params.set(key, String(value));"
-        )?;
+        writeln!(out, "        }} else if (value !== undefined) {{")?;
+        writeln!(out, "          params = params.set(key, String(value));")?;
         writeln!(out, "        }}")?;
         writeln!(out, "      }}")?;
         writeln!(out, "    }}")?;
@@ -124,10 +118,7 @@ fn emit_method(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Er
             out,
             "      const cookie = Object.entries(cookieParams).filter(([, v]) => v !== undefined).map(([k, v]) => `${{k}}=${{v}}`).join('; ');"
         )?;
-        writeln!(
-            out,
-            "      headers = headers.set('Cookie', cookie);"
-        )?;
+        writeln!(out, "      headers = headers.set('Cookie', cookie);")?;
         writeln!(out, "    }}")?;
     }
 
