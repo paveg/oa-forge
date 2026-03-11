@@ -6,7 +6,7 @@ expression: output
 
 import { useQuery, useMutation, useSuspenseQuery, queryOptions } from '@tanstack/react-query';
 import type { QueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
-import type { listResourcesQueryParams, listResourcesResponse, getResourcePathParams, getResourceResponse } from './types.gen';
+import type { listResourcesQueryParams, listResourcesHeaderParams, listResourcesResponse, getResourcePathParams, getResourceHeaderParams, getResourceCookieParams, getResourceResponse } from './types.gen';
 import type { RequestConfig } from './client.gen';
 import { listResources, getResource } from './client.gen';
 

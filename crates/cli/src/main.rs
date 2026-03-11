@@ -82,6 +82,10 @@ struct GenerateArgs {
     /// Query framework: react (default), vue, solid, svelte
     #[arg(long, default_value = "react")]
     query_framework: QueryFrameworkArg,
+
+    /// Client style: fetch (default) or custom
+    #[arg(long, default_value = "fetch")]
+    client_style: ClientStyleArg,
 }
 
 #[derive(Clone, clap::ValueEnum, Deserialize, Default, PartialEq)]
@@ -101,6 +105,23 @@ enum ClientType {
     Axios,
     Hono,
     Angular,
+}
+
+#[derive(Clone, clap::ValueEnum, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum ClientStyleArg {
+    #[default]
+    Fetch,
+    Custom,
+}
+
+impl ClientStyleArg {
+    fn to_emitter(&self) -> oa_forge_emitter_client::ClientStyle {
+        match self {
+            Self::Fetch => oa_forge_emitter_client::ClientStyle::Fetch,
+            Self::Custom => oa_forge_emitter_client::ClientStyle::Custom,
+        }
+    }
 }
 
 #[derive(Clone, clap::ValueEnum, Deserialize, Default, PartialEq)]
@@ -148,6 +169,7 @@ struct Config {
     mock: Option<bool>,
     split: Option<SplitMode>,
     query_framework: Option<QueryFrameworkArg>,
+    client_style: Option<ClientStyleArg>,
     /// Custom file header prepended to all generated files.
     /// Set to empty string to disable. Defaults to eslint-disable + attribution.
     header: Option<String>,
@@ -388,6 +410,21 @@ fn run_after_write_hooks(hooks: &[String], output: &std::path::Path) {
     }
 }
 
+/// Run the appropriate client emitter for the given API spec and options.
+fn emit_client(
+    api: &oa_forge_ir::ApiSpec,
+    client_type: &ClientType,
+    client_style: oa_forge_emitter_client::ClientStyle,
+    out: &mut String,
+) {
+    match client_type {
+        ClientType::Fetch => oa_forge_emitter_client::emit(api, client_style, out).unwrap(),
+        ClientType::Axios => oa_forge_emitter_axios::emit(api, out).unwrap(),
+        ClientType::Hono => oa_forge_emitter_hono::emit(api, out).unwrap(),
+        ClientType::Angular => oa_forge_emitter_angular::emit(api, out).unwrap(),
+    }
+}
+
 /// Resolved generation options (merged from CLI args + config file).
 struct GenerateOptions {
     input: PathBuf,
@@ -402,6 +439,7 @@ struct GenerateOptions {
     no_validate: bool,
     split: SplitMode,
     query_framework: QueryFrameworkArg,
+    client_style: ClientStyleArg,
     overrides: std::collections::BTreeMap<String, EndpointOverride>,
     header: String,
     after_write: Vec<String>,
@@ -465,12 +503,7 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
             });
             s.spawn(|_| {
                 let mut out = String::new();
-                match opts.client_type {
-                    ClientType::Fetch => oa_forge_emitter_client::emit(&api, &mut out).unwrap(),
-                    ClientType::Axios => oa_forge_emitter_axios::emit(&api, &mut out).unwrap(),
-                    ClientType::Hono => oa_forge_emitter_hono::emit(&api, &mut out).unwrap(),
-                    ClientType::Angular => oa_forge_emitter_angular::emit(&api, &mut out).unwrap(),
-                };
+                emit_client(&api, &opts.client_type, opts.client_style.to_emitter(), &mut out);
                 *client_out = apply_header(&oa_forge_formatter::format(&out), header);
             });
             if opts.hooks {
@@ -614,20 +647,7 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
                 };
 
                 let mut tag_client = String::new();
-                match opts.client_type {
-                    ClientType::Fetch => {
-                        oa_forge_emitter_client::emit(&tag_api, &mut tag_client).unwrap()
-                    }
-                    ClientType::Axios => {
-                        oa_forge_emitter_axios::emit(&tag_api, &mut tag_client).unwrap()
-                    }
-                    ClientType::Hono => {
-                        oa_forge_emitter_hono::emit(&tag_api, &mut tag_client).unwrap()
-                    }
-                    ClientType::Angular => {
-                        oa_forge_emitter_angular::emit(&tag_api, &mut tag_client).unwrap()
-                    }
-                };
+                emit_client(&tag_api, &opts.client_type, opts.client_style.to_emitter(), &mut tag_client);
                 let tag_client_formatted =
                     apply_header(&oa_forge_formatter::format(&tag_client), header);
                 files.push((tag_dir.join("client.gen.ts"), tag_client_formatted));
@@ -664,15 +684,21 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
                 let mut ep_content = String::new();
                 use std::fmt::Write;
                 writeln!(ep_content, "{header}").unwrap();
+                let client_style = opts.client_style.to_emitter();
+                let import_type = match client_style {
+                    oa_forge_emitter_client::ClientStyle::Custom => "CustomClient",
+                    oa_forge_emitter_client::ClientStyle::Fetch => "RequestConfig",
+                };
                 writeln!(
                     ep_content,
-                    "import type {{ RequestConfig }} from '../client.gen';"
+                    "import type {{ {import_type} }} from '../client.gen';"
                 )
                 .unwrap();
                 writeln!(ep_content).unwrap();
 
                 oa_forge_emitter_types::emit_endpoint(ep, &mut ep_content).unwrap();
-                oa_forge_emitter_client::emit_endpoint(ep, &mut ep_content).unwrap();
+                oa_forge_emitter_client::emit_endpoint(ep, client_style, &mut ep_content)
+                    .unwrap();
 
                 let ep_formatted = oa_forge_formatter::format(&ep_content);
                 files.push((
@@ -737,10 +763,23 @@ fn run_generate(args: GenerateArgs, config: Config) -> Result<()> {
         } else {
             config.query_framework.unwrap_or(QueryFrameworkArg::React)
         },
+        client_style: if args.client_style != ClientStyleArg::Fetch {
+            args.client_style
+        } else {
+            config.client_style.unwrap_or(ClientStyleArg::Fetch)
+        },
         overrides: config.overrides,
         header: config.header.unwrap_or_else(|| DEFAULT_HEADER.to_string()),
         after_write: config.after_write.unwrap_or_default(),
     };
+
+    // Validate: custom client style only works with fetch client type
+    if opts.client_style == ClientStyleArg::Custom && opts.client_type != ClientType::Fetch {
+        anyhow::bail!("--client-style custom is only supported with --client fetch");
+    }
+    if opts.client_style == ClientStyleArg::Custom && opts.hooks {
+        anyhow::bail!("--hooks is not compatible with --client-style custom (hooks require RequestConfig from the fetch client)");
+    }
 
     generate(&opts)?;
 

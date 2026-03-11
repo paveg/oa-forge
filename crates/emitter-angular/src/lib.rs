@@ -9,11 +9,18 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
     writeln!(out, "import {{ Injectable }} from '@angular/core';")?;
     writeln!(
         out,
-        "import {{ HttpClient, HttpParams }} from '@angular/common/http';"
+        "import {{ HttpClient, HttpParams, HttpHeaders }} from '@angular/common/http';"
     )?;
     writeln!(out, "import type {{ Observable }} from 'rxjs';")?;
 
-    emit_type_imports(api, out)?;
+    let imports = collect_type_imports(api);
+    if !imports.is_empty() {
+        writeln!(
+            out,
+            "import type {{ {} }} from './types.gen';",
+            imports.join(", ")
+        )?;
+    }
     writeln!(out)?;
 
     writeln!(out, "@Injectable({{ providedIn: 'root' }})")?;
@@ -31,64 +38,16 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
     Ok(())
 }
 
-fn emit_type_imports(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
-    let mut imports = Vec::new();
-
-    for endpoint in &api.endpoints {
-        let id = &endpoint.operation_id;
-        let has_path = endpoint
-            .parameters
-            .iter()
-            .any(|p| p.location == ParamLocation::Path);
-        let has_query = endpoint
-            .parameters
-            .iter()
-            .any(|p| p.location == ParamLocation::Query);
-
-        if has_path {
-            imports.push(format!("{id}PathParams"));
-        }
-        if has_query {
-            imports.push(format!("{id}QueryParams"));
-        }
-        if endpoint.response.is_some() && endpoint.response_type == ResponseType::Json {
-            imports.push(format!("{id}Response"));
-        }
-        if endpoint.request_body.is_some() {
-            imports.push(format!("{id}Body"));
-        }
-    }
-
-    if !imports.is_empty() {
-        writeln!(
-            out,
-            "import type {{ {} }} from './types.gen';",
-            imports.join(", ")
-        )?;
-    }
-
-    Ok(())
-}
-
 fn emit_method(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
-    let method = match endpoint.method {
-        HttpMethod::Get => "get",
-        HttpMethod::Post => "post",
-        HttpMethod::Put => "put",
-        HttpMethod::Patch => "patch",
-        HttpMethod::Delete => "delete",
-    };
+    let method = endpoint.method.as_lower();
 
-    let has_path = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Path);
-    let has_query = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Query);
+    let has_path = endpoint.has_params(&ParamLocation::Path);
+    let has_query = endpoint.has_params(&ParamLocation::Query);
+    let has_header = endpoint.has_params(&ParamLocation::Header);
+    let has_cookie = endpoint.has_params(&ParamLocation::Cookie);
     let has_body = endpoint.request_body.is_some();
+    let has_headers = has_header || has_cookie;
 
     let mut params = Vec::new();
     if has_path {
@@ -97,18 +56,18 @@ fn emit_method(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Er
     if has_query {
         params.push(format!("queryParams?: {id}QueryParams"));
     }
+    if has_header {
+        params.push(format!("headerParams?: {id}HeaderParams"));
+    }
+    if has_cookie {
+        params.push(format!("cookieParams?: {id}CookieParams"));
+    }
     if has_body {
         params.push(format!("body: {id}Body"));
     }
 
-    let return_type = match endpoint.response_type {
-        ResponseType::Json if endpoint.response.is_some() => format!("{id}Response"),
-        ResponseType::Text => "string".to_string(),
-        ResponseType::Blob => "Blob".to_string(),
-        _ => "void".to_string(),
-    };
-
-    let url = build_url_template(&endpoint.path);
+    let return_type = endpoint.return_type_ts();
+    let url = path_to_template_literal(&endpoint.path);
 
     writeln!(
         out,
@@ -124,37 +83,56 @@ fn emit_method(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Er
             out,
             "      for (const [key, value] of Object.entries(queryParams)) {{"
         )?;
+        writeln!(out, "        if (Array.isArray(value)) {{")?;
         writeln!(
             out,
-            "        if (value !== undefined) params = params.set(key, String(value));"
+            "          for (const v of value) params = params.append(key, String(v));"
         )?;
+        writeln!(
+            out,
+            "        }} else if (value !== undefined) {{"
+        )?;
+        writeln!(
+            out,
+            "          params = params.set(key, String(value));"
+        )?;
+        writeln!(out, "        }}")?;
         writeln!(out, "      }}")?;
         writeln!(out, "    }}")?;
     }
 
-    let options = match endpoint.response_type {
-        ResponseType::Text => {
-            if has_query {
-                "{{ params, responseType: 'text' as const }}"
-            } else {
-                "{{ responseType: 'text' as const }}"
-            }
-        }
-        ResponseType::Blob => {
-            if has_query {
-                "{{ params, responseType: 'blob' as const }}"
-            } else {
-                "{{ responseType: 'blob' as const }}"
-            }
-        }
-        _ => {
-            if has_query {
-                "{{ params }}"
-            } else {
-                ""
-            }
-        }
-    };
+    // Build HttpHeaders for header/cookie params
+    if has_headers {
+        writeln!(out, "    let headers = new HttpHeaders();")?;
+    }
+    if has_header {
+        writeln!(out, "    if (headerParams) {{")?;
+        writeln!(
+            out,
+            "      for (const [key, value] of Object.entries(headerParams)) {{"
+        )?;
+        writeln!(
+            out,
+            "        if (value !== undefined) headers = headers.set(key, String(value));"
+        )?;
+        writeln!(out, "      }}")?;
+        writeln!(out, "    }}")?;
+    }
+    if has_cookie {
+        writeln!(out, "    if (cookieParams) {{")?;
+        writeln!(
+            out,
+            "      const cookie = Object.entries(cookieParams).filter(([, v]) => v !== undefined).map(([k, v]) => `${{k}}=${{v}}`).join('; ');"
+        )?;
+        writeln!(
+            out,
+            "      headers = headers.set('Cookie', cookie);"
+        )?;
+        writeln!(out, "    }}")?;
+    }
+
+    // Build options object
+    let options = build_options(has_query, has_headers, endpoint.response_type.clone());
 
     if has_body {
         if options.is_empty() {
@@ -200,18 +178,25 @@ fn emit_method(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Er
     Ok(())
 }
 
-fn build_url_template(path: &str) -> String {
-    let mut result = String::new();
-    let mut chars = path.chars().peekable();
+fn build_options(has_query: bool, has_headers: bool, response_type: ResponseType) -> String {
+    let mut parts = Vec::new();
 
-    while let Some(c) = chars.next() {
-        if c == '{' {
-            let param_name: String = chars.by_ref().take_while(|&c| c != '}').collect();
-            result.push_str(&format!("${{pathParams.{param_name}}}"));
-        } else {
-            result.push(c);
-        }
+    if has_query {
+        parts.push("params".to_string());
+    }
+    if has_headers {
+        parts.push("headers".to_string());
     }
 
-    result
+    match response_type {
+        ResponseType::Text => parts.push("responseType: 'text' as const".to_string()),
+        ResponseType::Blob => parts.push("responseType: 'blob' as const".to_string()),
+        _ => {}
+    }
+
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("{{ {} }}", parts.join(", "))
+    }
 }

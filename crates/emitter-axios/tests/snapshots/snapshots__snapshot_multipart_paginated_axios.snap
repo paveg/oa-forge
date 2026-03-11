@@ -61,5 +61,6 @@ export async function listCursored(queryParams?: listCursoredQueryParams, config
 }
 
 export async function updateText(body: updateTextBody, config?: AxiosRequestConfig): Promise<void> {
-  const { data } = await _instance.put<void>(`/text-upload`, body, config);
+  const _config: AxiosRequestConfig = { ...config, headers: { ...config?.headers, 'Content-Type': 'text/plain' } };
+  const { data } = await _instance.put<void>(`/text-upload`, body, _config);
 }

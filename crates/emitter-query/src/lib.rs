@@ -99,39 +99,8 @@ pub fn emit_for(
 }
 
 fn emit_imports(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
-    let mut type_imports = Vec::new();
-    let mut fn_imports = Vec::new();
+    let type_imports = collect_type_imports(api);
     let has_any_error = api.endpoints.iter().any(|e| e.error_response.is_some());
-
-    for endpoint in &api.endpoints {
-        let id = &endpoint.operation_id;
-        let has_path = endpoint
-            .parameters
-            .iter()
-            .any(|p| p.location == ParamLocation::Path);
-        let has_query = endpoint
-            .parameters
-            .iter()
-            .any(|p| p.location == ParamLocation::Query);
-
-        if has_path {
-            type_imports.push(format!("{id}PathParams"));
-        }
-        if has_query {
-            type_imports.push(format!("{id}QueryParams"));
-        }
-        if endpoint.response.is_some() && endpoint.response_type == ResponseType::Json {
-            type_imports.push(format!("{id}Response"));
-        }
-        if endpoint.request_body.is_some() {
-            type_imports.push(format!("{id}Body"));
-        }
-        if endpoint.error_response.is_some() {
-            type_imports.push(format!("{id}Error"));
-        }
-
-        fn_imports.push(id.clone());
-    }
 
     if !type_imports.is_empty() {
         writeln!(
@@ -150,6 +119,12 @@ fn emit_imports(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> 
         "import type {{ {} }} from './client.gen';",
         client_type_imports.join(", ")
     )?;
+
+    let fn_imports: Vec<&str> = api
+        .endpoints
+        .iter()
+        .map(|e| e.operation_id.as_str())
+        .collect();
     writeln!(
         out,
         "import {{ {} }} from './client.gen';",
@@ -167,20 +142,9 @@ fn emit_query_hook(
     let id = &endpoint.operation_id;
     let hp = framework.hook_prefix();
     let tp = framework.type_prefix();
-    let response_type = match endpoint.response_type {
-        ResponseType::Json if endpoint.response.is_some() => format!("{id}Response"),
-        ResponseType::Text => "string".to_string(),
-        ResponseType::Blob => "Blob".to_string(),
-        _ => "void".to_string(),
-    };
-    let has_path = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Path);
-    let has_query = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Query);
+    let response_type = endpoint.return_type_ts();
+    let has_path = endpoint.has_params(&ParamLocation::Path);
+    let has_query = endpoint.has_params(&ParamLocation::Query);
 
     // Build params type for the combined hook signature
     let params_type = build_params_type(id, has_path, has_query);
@@ -386,18 +350,10 @@ fn emit_mutation_hook(
     framework: QueryFramework,
 ) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
-    let has_path = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Path);
+    let has_path = endpoint.has_params(&ParamLocation::Path);
     let has_body = endpoint.request_body.is_some();
 
-    let response_type = match endpoint.response_type {
-        ResponseType::Json if endpoint.response.is_some() => format!("{id}Response"),
-        ResponseType::Text => "string".to_string(),
-        ResponseType::Blob => "Blob".to_string(),
-        _ => "void".to_string(),
-    };
+    let response_type = endpoint.return_type_ts();
 
     let error_type = if endpoint.error_response.is_some() {
         format!("ApiError<{id}Error>")

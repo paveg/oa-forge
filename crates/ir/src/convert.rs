@@ -294,6 +294,7 @@ fn convert_all_of(
                         );
                     }
                 }
+                // Eagerly resolve the ref to populate the type cache (side effect only)
                 let _ = resolve_and_convert_ref(ref_path, ctx);
             }
             openapi::SchemaOrRef::Schema(s) => {
