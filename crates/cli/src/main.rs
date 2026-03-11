@@ -27,6 +27,8 @@ struct Cli {
 enum Command {
     /// Generate TypeScript code from an OpenAPI spec
     Generate(GenerateArgs),
+    /// Migrate from an Orval config to oa-forge config
+    Migrate(MigrateArgs),
 }
 
 #[derive(clap::Args, Default)]
@@ -83,9 +85,13 @@ struct GenerateArgs {
     #[arg(long, default_value = "react")]
     query_framework: QueryFrameworkArg,
 
-    /// Client style: fetch (default) or custom
-    #[arg(long, default_value = "fetch")]
-    client_style: ClientStyleArg,
+    /// Path to a custom client file (enables Orval-style mutator pattern)
+    #[arg(long)]
+    custom_client_path: Option<PathBuf>,
+
+    /// Export name of the custom client instance (default: "customInstance")
+    #[arg(long, default_value = "customInstance")]
+    custom_client_name: String,
 }
 
 #[derive(Clone, clap::ValueEnum, Deserialize, Default, PartialEq)]
@@ -105,23 +111,6 @@ enum ClientType {
     Axios,
     Hono,
     Angular,
-}
-
-#[derive(Clone, clap::ValueEnum, Deserialize, Default, PartialEq)]
-#[serde(rename_all = "lowercase")]
-enum ClientStyleArg {
-    #[default]
-    Fetch,
-    Custom,
-}
-
-impl ClientStyleArg {
-    fn to_emitter(&self) -> oa_forge_emitter_client::ClientStyle {
-        match self {
-            Self::Fetch => oa_forge_emitter_client::ClientStyle::Fetch,
-            Self::Custom => oa_forge_emitter_client::ClientStyle::Custom,
-        }
-    }
 }
 
 #[derive(Clone, clap::ValueEnum, Deserialize, Default, PartialEq)]
@@ -169,7 +158,10 @@ struct Config {
     mock: Option<bool>,
     split: Option<SplitMode>,
     query_framework: Option<QueryFrameworkArg>,
-    client_style: Option<ClientStyleArg>,
+    /// Path to a custom client file (enables Orval-style mutator pattern).
+    custom_client_path: Option<String>,
+    /// Export name of the custom client instance (default: "customInstance").
+    custom_client_name: Option<String>,
     /// Custom file header prepended to all generated files.
     /// Set to empty string to disable. Defaults to eslint-disable + attribution.
     header: Option<String>,
@@ -414,7 +406,7 @@ fn run_after_write_hooks(hooks: &[String], output: &std::path::Path) {
 fn emit_client(
     api: &oa_forge_ir::ApiSpec,
     client_type: &ClientType,
-    client_style: oa_forge_emitter_client::ClientStyle,
+    client_style: &oa_forge_emitter_client::ClientStyle,
     out: &mut String,
 ) {
     match client_type {
@@ -423,6 +415,27 @@ fn emit_client(
         ClientType::Hono => oa_forge_emitter_hono::emit(api, out).unwrap(),
         ClientType::Angular => oa_forge_emitter_angular::emit(api, out).unwrap(),
     }
+}
+
+/// Compute a relative import path from `from_dir` to `target_file`.
+/// Strips `.ts`/`.mts` extensions and ensures `./` or `../` prefix.
+fn compute_relative_import(from_dir: &std::path::Path, target_file: &std::path::Path) -> String {
+    let rel = pathdiff::diff_paths(target_file, from_dir)
+        .unwrap_or_else(|| target_file.to_path_buf());
+    let mut s = rel.to_string_lossy().to_string();
+    // Normalize Windows backslashes to forward slashes
+    s = s.replace('\\', "/");
+    // Strip .ts / .mts extension
+    if let Some(stripped) = s.strip_suffix(".ts") {
+        s = stripped.to_string();
+    } else if let Some(stripped) = s.strip_suffix(".mts") {
+        s = stripped.to_string();
+    }
+    // Ensure relative prefix
+    if !s.starts_with("./") && !s.starts_with("../") {
+        s = format!("./{s}");
+    }
+    s
 }
 
 /// Resolved generation options (merged from CLI args + config file).
@@ -439,7 +452,9 @@ struct GenerateOptions {
     no_validate: bool,
     split: SplitMode,
     query_framework: QueryFrameworkArg,
-    client_style: ClientStyleArg,
+    client_style: oa_forge_emitter_client::ClientStyle,
+    /// Original custom client file path (for recomputing relative imports in split modes).
+    custom_client_path: Option<PathBuf>,
     overrides: std::collections::BTreeMap<String, EndpointOverride>,
     header: String,
     after_write: Vec<String>,
@@ -503,7 +518,7 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
             });
             s.spawn(|_| {
                 let mut out = String::new();
-                emit_client(&api, &opts.client_type, opts.client_style.to_emitter(), &mut out);
+                emit_client(&api, &opts.client_type, &opts.client_style, &mut out);
                 *client_out = apply_header(&oa_forge_formatter::format(&out), header);
             });
             if opts.hooks {
@@ -646,8 +661,21 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
                     endpoints: endpoints.iter().map(|e| (*e).clone()).collect(),
                 };
 
+                // For tag-split, recompute import path from tag subdirectory
+                let tag_style = match (&opts.client_style, &opts.custom_client_path) {
+                    (oa_forge_emitter_client::ClientStyle::Custom(config), Some(ccp)) => {
+                        let tag_import = compute_relative_import(&tag_dir, ccp);
+                        oa_forge_emitter_client::ClientStyle::Custom(
+                            oa_forge_emitter_client::CustomClientConfig {
+                                import_path: tag_import,
+                                export_name: config.export_name.clone(),
+                            },
+                        )
+                    }
+                    (other, _) => other.clone(),
+                };
                 let mut tag_client = String::new();
-                emit_client(&tag_api, &opts.client_type, opts.client_style.to_emitter(), &mut tag_client);
+                emit_client(&tag_api, &opts.client_type, &tag_style, &mut tag_client);
                 let tag_client_formatted =
                     apply_header(&oa_forge_formatter::format(&tag_client), header);
                 files.push((tag_dir.join("client.gen.ts"), tag_client_formatted));
@@ -680,24 +708,45 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
             let endpoints_dir = output.join("endpoints");
             std::fs::create_dir_all(&endpoints_dir)?;
 
+            // For endpoint-split, recompute import path from endpoints/ subdirectory
+            let ep_style = match (&opts.client_style, &opts.custom_client_path) {
+                (oa_forge_emitter_client::ClientStyle::Custom(config), Some(ccp)) => {
+                    let ep_import = compute_relative_import(&endpoints_dir, ccp);
+                    oa_forge_emitter_client::ClientStyle::Custom(
+                        oa_forge_emitter_client::CustomClientConfig {
+                            import_path: ep_import,
+                            export_name: config.export_name.clone(),
+                        },
+                    )
+                }
+                (other, _) => other.clone(),
+            };
+
             for ep in &api.endpoints {
                 let mut ep_content = String::new();
                 use std::fmt::Write;
                 writeln!(ep_content, "{header}").unwrap();
-                let client_style = opts.client_style.to_emitter();
-                let import_type = match client_style {
-                    oa_forge_emitter_client::ClientStyle::Custom => "CustomClient",
-                    oa_forge_emitter_client::ClientStyle::Fetch => "RequestConfig",
-                };
-                writeln!(
-                    ep_content,
-                    "import type {{ {import_type} }} from '../client.gen';"
-                )
-                .unwrap();
+                match &ep_style {
+                    oa_forge_emitter_client::ClientStyle::Custom(config) => {
+                        writeln!(
+                            ep_content,
+                            "{}",
+                            oa_forge_emitter_client::custom_client_import(config)
+                        )
+                        .unwrap();
+                    }
+                    oa_forge_emitter_client::ClientStyle::Fetch => {
+                        writeln!(
+                            ep_content,
+                            "import type {{ RequestConfig }} from '../client.gen';"
+                        )
+                        .unwrap();
+                    }
+                }
                 writeln!(ep_content).unwrap();
 
                 oa_forge_emitter_types::emit_endpoint(ep, &mut ep_content).unwrap();
-                oa_forge_emitter_client::emit_endpoint(ep, client_style, &mut ep_content)
+                oa_forge_emitter_client::emit_endpoint(ep, &ep_style, &mut ep_content)
                     .unwrap();
 
                 let ep_formatted = oa_forge_formatter::format(&ep_content);
@@ -737,16 +786,55 @@ fn run_generate(args: GenerateArgs, config: Config) -> Result<()> {
         .or_else(|| config.input.map(PathBuf::from))
         .ok_or_else(|| anyhow::anyhow!("--input is required (or set `input` in oa-forge.toml)"))?;
 
+    let output = args
+        .output
+        .or_else(|| config.output.map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("./src/api"));
+
+    let client_type = args
+        .client
+        .unwrap_or_else(|| config.client.unwrap_or_default());
+
+    // Resolve custom client path: CLI flag takes precedence over config
+    let custom_client_path: Option<PathBuf> = args
+        .custom_client_path
+        .or_else(|| config.custom_client_path.map(PathBuf::from));
+    let custom_client_name = if args.custom_client_name != "customInstance" {
+        args.custom_client_name.clone()
+    } else {
+        config
+            .custom_client_name
+            .unwrap_or_else(|| "customInstance".to_string())
+    };
+
+    // Build client style from custom client path
+    let client_style = if let Some(ref ccp) = custom_client_path {
+        let import_path = compute_relative_import(&output, ccp);
+        oa_forge_emitter_client::ClientStyle::Custom(
+            oa_forge_emitter_client::CustomClientConfig {
+                import_path,
+                export_name: custom_client_name,
+            },
+        )
+    } else {
+        oa_forge_emitter_client::ClientStyle::Fetch
+    };
+
+    let hooks = args.hooks || config.hooks.unwrap_or(false);
+
+    // Validate: custom client only works with fetch client type
+    if custom_client_path.is_some() && client_type != ClientType::Fetch {
+        anyhow::bail!("--custom-client-path is only supported with --client fetch");
+    }
+    if custom_client_path.is_some() && hooks {
+        anyhow::bail!("--hooks is not compatible with --custom-client-path (hooks require RequestConfig from the fetch client)");
+    }
+
     let opts = GenerateOptions {
         input: input.clone(),
-        output: args
-            .output
-            .or_else(|| config.output.map(PathBuf::from))
-            .unwrap_or_else(|| PathBuf::from("./src/api")),
-        client_type: args
-            .client
-            .unwrap_or_else(|| config.client.unwrap_or_default()),
-        hooks: args.hooks || config.hooks.unwrap_or(false),
+        output,
+        client_type,
+        hooks,
         zod: args.zod || config.zod.unwrap_or(false),
         valibot: args.valibot || config.valibot.unwrap_or(false),
         msw: args.msw || config.msw.unwrap_or(false),
@@ -763,23 +851,12 @@ fn run_generate(args: GenerateArgs, config: Config) -> Result<()> {
         } else {
             config.query_framework.unwrap_or(QueryFrameworkArg::React)
         },
-        client_style: if args.client_style != ClientStyleArg::Fetch {
-            args.client_style
-        } else {
-            config.client_style.unwrap_or(ClientStyleArg::Fetch)
-        },
+        client_style,
+        custom_client_path,
         overrides: config.overrides,
         header: config.header.unwrap_or_else(|| DEFAULT_HEADER.to_string()),
         after_write: config.after_write.unwrap_or_default(),
     };
-
-    // Validate: custom client style only works with fetch client type
-    if opts.client_style == ClientStyleArg::Custom && opts.client_type != ClientType::Fetch {
-        anyhow::bail!("--client-style custom is only supported with --client fetch");
-    }
-    if opts.client_style == ClientStyleArg::Custom && opts.hooks {
-        anyhow::bail!("--hooks is not compatible with --client-style custom (hooks require RequestConfig from the fetch client)");
-    }
 
     generate(&opts)?;
 
@@ -816,15 +893,668 @@ fn run_generate(args: GenerateArgs, config: Config) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let config = load_config(cli.config.as_ref());
+// ─── Migrate command ──────────────────────────────────────────────────────────
 
-    let args = match cli.command {
-        Some(Command::Generate(a)) => a,
-        None => GenerateArgs::default(),
+#[derive(clap::Args)]
+struct MigrateArgs {
+    /// Path to the Orval config file (orval.config.ts, orval.config.js, etc.)
+    #[arg(long, default_value = "orval.config.ts")]
+    from: PathBuf,
+
+    /// Project name to migrate (for multi-project configs)
+    #[arg(long)]
+    project: Option<String>,
+
+    /// Output path for the generated oa-forge config (default: stdout)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Output format
+    #[arg(long, default_value = "ts")]
+    format: MigrateFormat,
+}
+
+#[derive(Clone, clap::ValueEnum, Default)]
+enum MigrateFormat {
+    #[default]
+    Ts,
+    Json,
+    Toml,
+}
+
+/// Load an Orval config file via tsx and return raw JSON value.
+fn load_orval_config(path: &std::path::Path) -> Result<serde_json::Value> {
+    let abs_path =
+        std::fs::canonicalize(path).map_err(|e| anyhow::anyhow!("cannot resolve {}: {e}", path.display()))?;
+    let eval_script = format!(
+        "import c from '{}'; process.stdout.write(JSON.stringify(c.default ?? c))",
+        abs_path.display()
+    );
+
+    let result = std::process::Command::new("tsx")
+        .args(["--eval", &eval_script])
+        .output()
+        .or_else(|_| {
+            std::process::Command::new("npx")
+                .args(["tsx", "--eval", &eval_script])
+                .output()
+        });
+
+    match result {
+        Ok(output) if output.status.success() => {
+            let json = String::from_utf8(output.stdout)?;
+            Ok(serde_json::from_str(&json)?)
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("tsx failed: {stderr}")
+        }
+        Err(_) => anyhow::bail!(
+            "tsx not found. Install tsx (`npm i -g tsx`) to evaluate the Orval config."
+        ),
+    }
+}
+
+struct MigrateResult {
+    config_lines: Vec<String>,
+    converted: Vec<String>,
+    warnings: Vec<String>,
+    unsupported: Vec<String>,
+}
+
+fn migrate_orval_project(
+    name: &str,
+    project: &serde_json::Value,
+) -> MigrateResult {
+    let mut lines = Vec::new();
+    let mut converted = Vec::new();
+    let mut warnings = Vec::new();
+    let mut unsupported = Vec::new();
+
+    // ── input ──
+    let input_val = &project["input"];
+    let input_target = if input_val.is_string() {
+        input_val.as_str().map(|s| s.to_string())
+    } else {
+        input_val["target"].as_str().map(|s| s.to_string())
     };
-    run_generate(args, config)?;
+    if let Some(ref target) = input_target {
+        lines.push(format!("  input: '{}',", target));
+        converted.push(format!("input.target → input: \"{}\"", target));
+    }
+
+    // input.filters
+    if input_val.is_object() {
+        if input_val.get("filters").is_some_and(|f| !f.is_null()) {
+            unsupported.push("input.filters (tag/schema filtering) → not yet supported".into());
+        }
+        if input_val.get("override").is_some_and(|o| o.get("transformer").is_some()) {
+            unsupported.push("input.override.transformer → not yet supported".into());
+        }
+    }
+
+    // ── output ──
+    let output_val = &project["output"];
+    let output_target = if output_val.is_string() {
+        output_val.as_str().map(|s| s.to_string())
+    } else {
+        output_val["target"].as_str().map(|s| s.to_string())
+    };
+    if let Some(ref target) = output_target {
+        lines.push(format!("  output: '{}',", target));
+        converted.push(format!("output.target → output: \"{}\"", target));
+    }
+
+    // output.mode → split
+    if let Some(mode) = output_val["mode"].as_str() {
+        let split_val = match mode {
+            "single" => "single",
+            "tags" | "tags-split" => "tag",
+            "split" => "endpoint",
+            other => {
+                unsupported.push(format!("output.mode: \"{}\" → unknown mode", other));
+                "single"
+            }
+        };
+        lines.push(format!("  split: '{}',", split_val));
+        converted.push(format!("output.mode: \"{}\" → split: \"{}\"", mode, split_val));
+    }
+
+    // output.httpClient → client
+    if let Some(http_client) = output_val["httpClient"].as_str() {
+        match http_client {
+            "fetch" | "axios" => {
+                lines.push(format!("  client: '{}',", http_client));
+                converted.push(format!("output.httpClient: \"{}\" → client: \"{}\"", http_client, http_client));
+            }
+            "angular" => {
+                lines.push("  client: 'angular',".into());
+                converted.push("output.httpClient: \"angular\" → client: \"angular\"".into());
+            }
+            other => {
+                unsupported.push(format!("output.httpClient: \"{}\" → not supported", other));
+            }
+        }
+    }
+
+    // output.client → hooks + query_framework
+    if let Some(client) = output_val["client"].as_str() {
+        match client {
+            "react-query" => {
+                lines.push("  hooks: true,".into());
+                lines.push("  query_framework: 'react',".into());
+                converted.push("output.client: \"react-query\" → hooks: true, query_framework: \"react\"".into());
+            }
+            "vue-query" => {
+                lines.push("  hooks: true,".into());
+                lines.push("  query_framework: 'vue',".into());
+                converted.push("output.client: \"vue-query\" → hooks: true, query_framework: \"vue\"".into());
+            }
+            "solid-query" => {
+                lines.push("  hooks: true,".into());
+                lines.push("  query_framework: 'solid',".into());
+                converted.push("output.client: \"solid-query\" → hooks: true, query_framework: \"solid\"".into());
+            }
+            "svelte-query" => {
+                lines.push("  hooks: true,".into());
+                lines.push("  query_framework: 'svelte',".into());
+                converted.push("output.client: \"svelte-query\" → hooks: true, query_framework: \"svelte\"".into());
+            }
+            "zod" => {
+                lines.push("  zod: true,".into());
+                converted.push("output.client: \"zod\" → zod: true".into());
+            }
+            "hono" => {
+                lines.push("  client: 'hono',".into());
+                converted.push("output.client: \"hono\" → client: \"hono\"".into());
+            }
+            "fetch" | "axios" | "axios-functions" | "angular" => {
+                // httpClient already handles this
+            }
+            other => {
+                unsupported.push(format!("output.client: \"{}\" → not supported", other));
+            }
+        }
+    }
+
+    // output.mock
+    if let Some(mock_val) = output_val.get("mock") {
+        if mock_val.as_bool() == Some(true) || mock_val.is_object() {
+            lines.push("  mock: true,".into());
+            lines.push("  msw: true,".into());
+            converted.push("output.mock → mock: true, msw: true".into());
+        }
+    }
+
+    // output.clean
+    if output_val.get("clean").is_some_and(|c| !c.is_null()) {
+        unsupported.push("output.clean → not yet supported".into());
+    }
+
+    // output.baseUrl
+    if output_val.get("baseUrl").is_some_and(|b| !b.is_null()) {
+        unsupported.push("output.baseUrl → not yet supported".into());
+    }
+
+    // output.prettier / biome
+    if output_val.get("prettier").is_some_and(|p| p.as_bool() == Some(true)) {
+        warnings.push("output.prettier → oa-forge has a built-in formatter (no external dependency needed)".into());
+    }
+    if output_val.get("biome").is_some_and(|b| b.as_bool() == Some(true)) {
+        warnings.push("output.biome → oa-forge has a built-in formatter (no external dependency needed)".into());
+    }
+
+    // ── output.override ──
+    let override_val = &output_val["override"];
+    if override_val.is_object() {
+        // mutator → custom_client_path + custom_client_name
+        if let Some(mutator) = override_val.get("mutator") {
+            if let Some(path) = mutator.as_str() {
+                lines.push(format!("  custom_client_path: '{}',", path));
+                converted.push(format!("override.mutator: \"{}\" → custom_client_path", path));
+            } else if mutator.is_object() {
+                if let Some(path) = mutator["path"].as_str() {
+                    lines.push(format!("  custom_client_path: '{}',", path));
+                    converted.push(format!("override.mutator.path → custom_client_path: \"{}\"", path));
+                }
+                if let Some(name) = mutator["name"].as_str() {
+                    lines.push(format!("  custom_client_name: '{}',", name));
+                    converted.push(format!("override.mutator.name → custom_client_name: \"{}\"", name));
+                } else if mutator["default"].as_bool() == Some(true) {
+                    warnings.push("override.mutator.default: true → oa-forge only supports named exports; rename your default export".into());
+                }
+                if mutator.get("alias").is_some_and(|a| !a.is_null()) {
+                    unsupported.push("override.mutator.alias → not supported".into());
+                }
+                if mutator.get("external").is_some_and(|e| !e.is_null()) {
+                    unsupported.push("override.mutator.external → not supported".into());
+                }
+            }
+        }
+
+        // header
+        if let Some(header) = override_val.get("header") {
+            if let Some(h) = header.as_str() {
+                lines.push(format!("  header: '{}',", h));
+                converted.push("override.header → header".into());
+            } else if header.as_bool() == Some(false) {
+                lines.push("  header: '',".into());
+                converted.push("override.header: false → header: \"\" (empty, disables header)".into());
+            } else {
+                unsupported.push("override.header (function) → only string headers supported".into());
+            }
+        }
+
+        // query options
+        if override_val.get("query").is_some_and(|q| q.is_object()) {
+            unsupported
+                .push("override.query (useSuspenseQuery, useInfinite, etc.) → granular query options not yet supported".into());
+        }
+
+        // operations
+        if let Some(ops) = override_val.get("operations") {
+            if ops.is_object() {
+                let op_map = ops.as_object().unwrap();
+                if !op_map.is_empty() {
+                    warnings.push(format!(
+                        "override.operations: {} operation override(s) found → oa-forge overrides use \"METHOD /path\" keys, not operationId. Manual mapping required.",
+                        op_map.len()
+                    ));
+                }
+            }
+        }
+
+        // tags overrides
+        if override_val.get("tags").is_some_and(|t| t.is_object()) {
+            unsupported.push("override.tags (per-tag overrides) → not yet supported".into());
+        }
+
+        // transformer
+        if override_val.get("transformer").is_some_and(|t| !t.is_null()) {
+            unsupported.push("override.transformer → not yet supported".into());
+        }
+
+        // useTypeOverInterfaces
+        if override_val.get("useTypeOverInterfaces").is_some_and(|u| !u.is_null()) {
+            unsupported.push("override.useTypeOverInterfaces → not yet supported".into());
+        }
+
+        // enumGenerationType
+        if override_val.get("enumGenerationType").is_some_and(|e| !e.is_null()) {
+            unsupported.push("override.enumGenerationType → not yet supported".into());
+        }
+
+        // formData / formUrlEncoded
+        if override_val.get("formData").is_some_and(|f| !f.is_null()) {
+            unsupported.push("override.formData → not yet supported".into());
+        }
+        if override_val.get("formUrlEncoded").is_some_and(|f| !f.is_null()) {
+            unsupported.push("override.formUrlEncoded → not yet supported".into());
+        }
+
+        // zod options
+        if let Some(zod) = override_val.get("zod") {
+            if zod.is_object() {
+                lines.push("  zod: true,".into());
+                converted.push("override.zod → zod: true (granular zod options not yet supported)".into());
+            }
+        }
+    }
+
+    // ── hooks ──
+    if let Some(hooks) = project.get("hooks") {
+        if let Some(after) = hooks.get("afterAllFilesWrite") {
+            if let Some(cmd) = after.as_str() {
+                lines.push(format!("  after_write: ['{}'],", cmd));
+                converted.push(format!("hooks.afterAllFilesWrite → after_write: [\"{}\"]", cmd));
+            } else if let Some(arr) = after.as_array() {
+                let cmds: Vec<String> = arr
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| format!("'{}'", s)))
+                    .collect();
+                if !cmds.is_empty() {
+                    lines.push(format!("  after_write: [{}],", cmds.join(", ")));
+                    converted.push("hooks.afterAllFilesWrite → after_write".into());
+                }
+            }
+        }
+    }
+
+    let _ = name; // used for diagnostic context
+    MigrateResult {
+        config_lines: lines,
+        converted,
+        warnings,
+        unsupported,
+    }
+}
+
+fn run_migrate(args: MigrateArgs) -> Result<()> {
+    let orval_config = load_orval_config(&args.from)?;
+
+    // Determine which project to migrate
+    let (project_name, project_val) = if orval_config.is_object() {
+        let obj = orval_config.as_object().unwrap();
+
+        // Check if it looks like a direct Options object (has input/output at top level)
+        let is_direct = obj.contains_key("input") || obj.contains_key("output");
+
+        if is_direct {
+            ("default".to_string(), orval_config.clone())
+        } else if let Some(ref name) = args.project {
+            let val = obj
+                .get(name)
+                .ok_or_else(|| {
+                    let available: Vec<&String> = obj.keys().collect();
+                    anyhow::anyhow!(
+                        "project '{}' not found. Available: {}",
+                        name,
+                        available
+                            .iter()
+                            .map(|k| format!("\"{}\"", k))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?
+                .clone();
+            (name.clone(), val)
+        } else if obj.len() == 1 {
+            let (name, val) = obj.iter().next().unwrap();
+            (name.clone(), val.clone())
+        } else {
+            let available: Vec<&String> = obj.keys().collect();
+            anyhow::bail!(
+                "multi-project config detected. Use --project to select one.\nAvailable: {}",
+                available
+                    .iter()
+                    .map(|k| format!("\"{}\"", k))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    } else {
+        anyhow::bail!("unexpected config format: expected an object");
+    };
+
+    let result = migrate_orval_project(&project_name, &project_val);
+
+    // Build output
+    let config_content = match args.format {
+        MigrateFormat::Ts => {
+            let mut out = String::new();
+            out.push_str("import { defineConfig } from 'oa-forge/config';\n\n");
+            out.push_str("export default defineConfig({\n");
+            for line in &result.config_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
+            out.push_str("});\n");
+            out
+        }
+        MigrateFormat::Json => {
+            // Convert lines to a simple JSON object
+            let mut out = String::from("{\n");
+            for (i, line) in result.config_lines.iter().enumerate() {
+                let trimmed = line.trim().trim_end_matches(',');
+                // Convert single quotes to double quotes for JSON
+                let json_line = trimmed.replace('\'', "\"");
+                out.push_str("  ");
+                out.push_str(&json_line);
+                if i < result.config_lines.len() - 1 {
+                    out.push(',');
+                }
+                out.push('\n');
+            }
+            out.push_str("}\n");
+            out
+        }
+        MigrateFormat::Toml => {
+            let mut out = String::new();
+            for line in &result.config_lines {
+                let trimmed = line.trim().trim_end_matches(',');
+                // Convert 'value' → "value" and key: → key =
+                let toml_line = trimmed
+                    .replace('\'', "\"")
+                    .replacen(": ", " = ", 1);
+                // Handle arrays: convert [...] to toml syntax
+                out.push_str(&toml_line);
+                out.push('\n');
+            }
+            out
+        }
+    };
+
+    // Write or print config
+    if let Some(ref output_path) = args.output {
+        std::fs::write(output_path, &config_content)?;
+        eprintln!("Config written to: {}", output_path.display());
+    } else {
+        print!("{config_content}");
+    }
+
+    // Print migration report to stderr
+    eprintln!();
+    eprintln!("── Migration report: {} (from {}) ──", project_name, args.from.display());
+    eprintln!();
+
+    if !result.converted.is_empty() {
+        for item in &result.converted {
+            eprintln!("  \x1b[32m✓\x1b[0m {item}");
+        }
+    }
+    if !result.warnings.is_empty() {
+        eprintln!();
+        for item in &result.warnings {
+            eprintln!("  \x1b[33m⚠\x1b[0m {item}");
+        }
+    }
+    if !result.unsupported.is_empty() {
+        eprintln!();
+        for item in &result.unsupported {
+            eprintln!("  \x1b[31m✗\x1b[0m {item}");
+        }
+    }
+
+    eprintln!();
+    eprintln!(
+        "  {} converted, {} warnings, {} unsupported",
+        result.converted.len(),
+        result.warnings.len(),
+        result.unsupported.len()
+    );
 
     Ok(())
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Command::Migrate(args)) => run_migrate(args),
+        _ => {
+            let config = load_config(cli.config.as_ref());
+            let args = match cli.command {
+                Some(Command::Generate(a)) => a,
+                None => GenerateArgs::default(),
+                _ => unreachable!(),
+            };
+            run_generate(args, config)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrate_basic_orval_config() {
+        let orval: serde_json::Value = serde_json::json!({
+            "input": { "target": "./openapi.yaml" },
+            "output": {
+                "target": "./src/api/generated",
+                "mode": "tags",
+                "httpClient": "fetch",
+                "client": "react-query",
+                "mock": true,
+                "override": {
+                    "mutator": {
+                        "path": "./src/api/custom-fetch.ts",
+                        "name": "customFetch"
+                    },
+                    "header": "/* generated */"
+                }
+            },
+            "hooks": {
+                "afterAllFilesWrite": "prettier --write"
+            }
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        // Verify converted fields
+        assert!(result.config_lines.iter().any(|l| l.contains("input: './openapi.yaml'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("output: './src/api/generated'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("split: 'tag'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("hooks: true")));
+        assert!(result.config_lines.iter().any(|l| l.contains("query_framework: 'react'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("mock: true")));
+        assert!(result.config_lines.iter().any(|l| l.contains("custom_client_path: './src/api/custom-fetch.ts'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("custom_client_name: 'customFetch'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("after_write:")));
+        assert!(result.config_lines.iter().any(|l| l.contains("header: '/* generated */'")));
+
+        assert!(!result.converted.is_empty());
+        assert!(result.unsupported.is_empty());
+    }
+
+    #[test]
+    fn migrate_unsupported_fields_reported() {
+        let orval: serde_json::Value = serde_json::json!({
+            "input": {
+                "target": "./spec.yaml",
+                "filters": { "tags": ["pets"] },
+                "override": { "transformer": "./transform.js" }
+            },
+            "output": {
+                "target": "./out",
+                "baseUrl": "/api/v1",
+                "clean": true,
+                "override": {
+                    "query": { "useSuspenseQuery": true },
+                    "tags": { "pets": {} },
+                    "transformer": "./out-transform.js",
+                    "useTypeOverInterfaces": true,
+                    "enumGenerationType": "union"
+                }
+            }
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        assert!(result.unsupported.iter().any(|u| u.contains("input.filters")));
+        assert!(result.unsupported.iter().any(|u| u.contains("input.override.transformer")));
+        assert!(result.unsupported.iter().any(|u| u.contains("baseUrl")));
+        assert!(result.unsupported.iter().any(|u| u.contains("clean")));
+        assert!(result.unsupported.iter().any(|u| u.contains("override.query")));
+        assert!(result.unsupported.iter().any(|u| u.contains("override.tags")));
+        assert!(result.unsupported.iter().any(|u| u.contains("override.transformer")));
+        assert!(result.unsupported.iter().any(|u| u.contains("useTypeOverInterfaces")));
+        assert!(result.unsupported.iter().any(|u| u.contains("enumGenerationType")));
+    }
+
+    #[test]
+    fn migrate_tags_split_maps_to_tag() {
+        let orval: serde_json::Value = serde_json::json!({
+            "input": "./spec.yaml",
+            "output": { "target": "./out", "mode": "tags-split" }
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        assert!(result.config_lines.iter().any(|l| l.contains("split: 'tag'")));
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn migrate_mutator_string_shorthand() {
+        let orval: serde_json::Value = serde_json::json!({
+            "output": {
+                "target": "./out",
+                "override": {
+                    "mutator": "./src/custom.ts"
+                }
+            }
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        assert!(result.config_lines.iter().any(|l| l.contains("custom_client_path: './src/custom.ts'")));
+    }
+
+    #[test]
+    fn migrate_mutator_default_export_warns() {
+        let orval: serde_json::Value = serde_json::json!({
+            "output": {
+                "target": "./out",
+                "override": {
+                    "mutator": { "path": "./client.ts", "default": true }
+                }
+            }
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        assert!(result.warnings.iter().any(|w| w.contains("default export")));
+    }
+
+    #[test]
+    fn migrate_input_as_string() {
+        let orval: serde_json::Value = serde_json::json!({
+            "input": "./spec.yaml",
+            "output": "./out"
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        assert!(result.config_lines.iter().any(|l| l.contains("input: './spec.yaml'")));
+        assert!(result.config_lines.iter().any(|l| l.contains("output: './out'")));
+    }
+
+    #[test]
+    fn migrate_vue_query_client() {
+        let orval: serde_json::Value = serde_json::json!({
+            "input": "./spec.yaml",
+            "output": { "target": "./out", "client": "vue-query" }
+        });
+
+        let result = migrate_orval_project("test", &orval);
+
+        assert!(result.config_lines.iter().any(|l| l.contains("hooks: true")));
+        assert!(result.config_lines.iter().any(|l| l.contains("query_framework: 'vue'")));
+    }
+
+    #[test]
+    fn compute_relative_import_basic() {
+        let from = std::path::Path::new("./src/api");
+        let to = std::path::Path::new("./src/custom-client.ts");
+        let result = compute_relative_import(from, to);
+        assert_eq!(result, "../custom-client");
+    }
+
+    #[test]
+    fn compute_relative_import_same_dir() {
+        let from = std::path::Path::new("./src/api");
+        let to = std::path::Path::new("./src/api/client.ts");
+        let result = compute_relative_import(from, to);
+        assert_eq!(result, "./client");
+    }
+
+    #[test]
+    fn compute_relative_import_deep() {
+        let from = std::path::Path::new("./src/api/endpoints");
+        let to = std::path::Path::new("./lib/custom-client.mts");
+        let result = compute_relative_import(from, to);
+        assert_eq!(result, "../../../lib/custom-client");
+    }
 }

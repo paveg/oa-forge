@@ -24,7 +24,7 @@ fn bench_petstore(c: &mut Criterion) {
     c.bench_function("petstore_emit_client", |b| {
         b.iter(|| {
             let mut out = String::new();
-            oa_forge_emitter_client::emit(&api, oa_forge_emitter_client::ClientStyle::Fetch, &mut out).unwrap();
+            oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut out).unwrap();
             out
         })
     });
@@ -44,7 +44,7 @@ fn bench_petstore(c: &mut Criterion) {
             let mut types = String::new();
             oa_forge_emitter_types::emit(&api, &mut types).unwrap();
             let mut client = String::new();
-            oa_forge_emitter_client::emit(&api, oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
+            oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
             let mut hooks = String::new();
             oa_forge_emitter_query::emit(&api, &mut hooks).unwrap();
             oa_forge_formatter::format(&types);
@@ -64,7 +64,7 @@ fn bench_additional_props(c: &mut Criterion) {
             let mut types = String::new();
             oa_forge_emitter_types::emit(&api, &mut types).unwrap();
             let mut client = String::new();
-            oa_forge_emitter_client::emit(&api, oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
+            oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
             oa_forge_formatter::format(&types);
             oa_forge_formatter::format(&client);
         })
@@ -95,7 +95,7 @@ fn bench_error_responses(c: &mut Criterion) {
             let mut types = String::new();
             oa_forge_emitter_types::emit(&api, &mut types).unwrap();
             let mut client = String::new();
-            oa_forge_emitter_client::emit(&api, oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
+            oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
             let mut hooks = String::new();
             oa_forge_emitter_query::emit(&api, &mut hooks).unwrap();
             oa_forge_formatter::format(&types);
@@ -125,7 +125,7 @@ fn bench_large_scale(c: &mut Criterion) {
             let mut types = String::new();
             oa_forge_emitter_types::emit(&api, &mut types).unwrap();
             let mut client = String::new();
-            oa_forge_emitter_client::emit(&api, oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
+            oa_forge_emitter_client::emit(&api, &oa_forge_emitter_client::ClientStyle::Fetch, &mut client).unwrap();
             let mut hooks = String::new();
             oa_forge_emitter_query::emit(&api, &mut hooks).unwrap();
             oa_forge_formatter::format(&types);

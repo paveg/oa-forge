@@ -28,6 +28,10 @@ export interface OaForgeConfig {
   split?: 'single' | 'tag' | 'endpoint';
   /** Query framework for hooks generation. */
   query_framework?: 'react' | 'vue' | 'solid' | 'svelte';
+  /** Path to a custom client file (enables Orval-style mutator pattern). */
+  custom_client_path?: string;
+  /** Export name of the custom client instance (default: "customInstance"). */
+  custom_client_name?: string;
   /** Per-endpoint overrides keyed by "METHOD /path" (e.g., "GET /pets/{petId}"). */
   overrides?: Record<string, EndpointOverride>;
 }

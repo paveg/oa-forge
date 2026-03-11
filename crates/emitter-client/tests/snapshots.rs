@@ -1,4 +1,4 @@
-use oa_forge_emitter_client::{emit, ClientStyle};
+use oa_forge_emitter_client::{emit, ClientStyle, CustomClientConfig};
 use oa_forge_ir::convert;
 use oa_forge_parser::parse;
 
@@ -6,7 +6,7 @@ fn generate_client(yaml: &str) -> String {
     let spec = parse(yaml).expect("parse failed");
     let api = convert(&spec).expect("convert failed");
     let mut output = String::new();
-    emit(&api, ClientStyle::Fetch, &mut output).expect("emit failed");
+    emit(&api, &ClientStyle::Fetch, &mut output).expect("emit failed");
     output
 }
 
@@ -14,7 +14,11 @@ fn generate_custom_client(yaml: &str) -> String {
     let spec = parse(yaml).expect("parse failed");
     let api = convert(&spec).expect("convert failed");
     let mut output = String::new();
-    emit(&api, ClientStyle::Custom, &mut output).expect("emit failed");
+    let style = ClientStyle::Custom(CustomClientConfig {
+        import_path: "../custom-client".to_string(),
+        export_name: "customInstance".to_string(),
+    });
+    emit(&api, &style, &mut output).expect("emit failed");
     output
 }
 

@@ -6,15 +6,7 @@ expression: output
 
 import type { listPetsQueryParams, listPetsResponse, createPetResponse, createPetBody, getPetPathParams, getPetResponse, deletePetPathParams } from './types.gen';
 
-export type CustomClient = (
-  method: string,
-  url: string,
-  options?: {
-    headers?: Record<string, string>;
-    body?: unknown;
-    signal?: AbortSignal;
-  },
-) => Promise<unknown>;
+import { customInstance } from '../custom-client';
 
 type ArrayStyle = 'comma' | 'multi' | 'brackets';
 
@@ -42,21 +34,21 @@ function buildQuery(
   return parts.length > 0 ? '?' + parts.join('&') : '';
 }
 
-export function listPets(client: CustomClient, queryParams?: listPetsQueryParams): Promise<listPetsResponse> {
-  return client('GET', `/pets${buildQuery(queryParams as Record<string, unknown>)}`) as Promise<listPetsResponse>;
+export function listPets(queryParams?: listPetsQueryParams): Promise<listPetsResponse> {
+  return customInstance({ url: `/pets${buildQuery(queryParams as Record<string, unknown>)}`, method: 'GET' }) as Promise<listPetsResponse>;
 }
 
-export function createPet(client: CustomClient, body: createPetBody): Promise<createPetResponse> {
-  return client('POST', `/pets`, {
+export function createPet(body: createPetBody): Promise<createPetResponse> {
+  return customInstance({ url: `/pets`, method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    data: JSON.stringify(body),
   }) as Promise<createPetResponse>;
 }
 
-export function getPet(client: CustomClient, pathParams: getPetPathParams): Promise<getPetResponse> {
-  return client('GET', `/pets/${pathParams.petId}`) as Promise<getPetResponse>;
+export function getPet(pathParams: getPetPathParams): Promise<getPetResponse> {
+  return customInstance({ url: `/pets/${pathParams.petId}`, method: 'GET' }) as Promise<getPetResponse>;
 }
 
-export function deletePet(client: CustomClient, pathParams: deletePetPathParams): Promise<void> {
-  return client('DELETE', `/pets/${pathParams.petId}`) as Promise<void>;
+export function deletePet(pathParams: deletePetPathParams): Promise<void> {
+  return customInstance({ url: `/pets/${pathParams.petId}`, method: 'DELETE' }) as Promise<void>;
 }

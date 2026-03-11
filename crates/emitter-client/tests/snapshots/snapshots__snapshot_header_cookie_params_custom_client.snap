@@ -6,15 +6,7 @@ expression: output
 
 import type { listResourcesQueryParams, listResourcesHeaderParams, listResourcesResponse, getResourcePathParams, getResourceHeaderParams, getResourceCookieParams, getResourceResponse } from './types.gen';
 
-export type CustomClient = (
-  method: string,
-  url: string,
-  options?: {
-    headers?: Record<string, string>;
-    body?: unknown;
-    signal?: AbortSignal;
-  },
-) => Promise<unknown>;
+import { customInstance } from '../custom-client';
 
 type ArrayStyle = 'comma' | 'multi' | 'brackets';
 
@@ -42,14 +34,14 @@ function buildQuery(
   return parts.length > 0 ? '?' + parts.join('&') : '';
 }
 
-export function listResources(client: CustomClient, queryParams?: listResourcesQueryParams, headerParams: listResourcesHeaderParams): Promise<listResourcesResponse> {
-  return client('GET', `/resources${buildQuery(queryParams as Record<string, unknown>)}`, {
+export function listResources(queryParams?: listResourcesQueryParams, headerParams: listResourcesHeaderParams): Promise<listResourcesResponse> {
+  return customInstance({ url: `/resources${buildQuery(queryParams as Record<string, unknown>)}`, method: 'GET',
     headers: { ...headerParams as Record<string, string> },
   }) as Promise<listResourcesResponse>;
 }
 
-export function getResource(client: CustomClient, pathParams: getResourcePathParams, headerParams: getResourceHeaderParams, cookieParams: getResourceCookieParams): Promise<getResourceResponse> {
-  return client('GET', `/resources/${pathParams.resourceId}`, {
+export function getResource(pathParams: getResourcePathParams, headerParams: getResourceHeaderParams, cookieParams: getResourceCookieParams): Promise<getResourceResponse> {
+  return customInstance({ url: `/resources/${pathParams.resourceId}`, method: 'GET',
     headers: { ...headerParams as Record<string, string>, Cookie: Object.entries(cookieParams).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join('; ') },
   }) as Promise<getResourceResponse>;
 }

@@ -6,15 +6,7 @@ expression: output
 
 import type { uploadFileResponse, uploadFileBody, listItemsQueryParams, listItemsResponse, listCursoredQueryParams, listCursoredResponse, updateTextBody } from './types.gen';
 
-export type CustomClient = (
-  method: string,
-  url: string,
-  options?: {
-    headers?: Record<string, string>;
-    body?: unknown;
-    signal?: AbortSignal;
-  },
-) => Promise<unknown>;
+import { customInstance } from '../custom-client';
 
 type ArrayStyle = 'comma' | 'multi' | 'brackets';
 
@@ -42,9 +34,9 @@ function buildQuery(
   return parts.length > 0 ? '?' + parts.join('&') : '';
 }
 
-export function uploadFile(client: CustomClient, body: uploadFileBody): Promise<uploadFileResponse> {
-  return client('POST', `/upload`, {
-    body: (() => {
+export function uploadFile(body: uploadFileBody): Promise<uploadFileResponse> {
+  return customInstance({ url: `/upload`, method: 'POST',
+    data: (() => {
       const fd = new FormData();
       for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
         if (v instanceof Blob) fd.append(k, v);
@@ -55,17 +47,17 @@ export function uploadFile(client: CustomClient, body: uploadFileBody): Promise<
   }) as Promise<uploadFileResponse>;
 }
 
-export function listItems(client: CustomClient, queryParams?: listItemsQueryParams): Promise<listItemsResponse> {
-  return client('GET', `/items${buildQuery(queryParams as Record<string, unknown>)}`) as Promise<listItemsResponse>;
+export function listItems(queryParams?: listItemsQueryParams): Promise<listItemsResponse> {
+  return customInstance({ url: `/items${buildQuery(queryParams as Record<string, unknown>)}`, method: 'GET' }) as Promise<listItemsResponse>;
 }
 
-export function listCursored(client: CustomClient, queryParams?: listCursoredQueryParams): Promise<listCursoredResponse> {
-  return client('GET', `/cursored${buildQuery(queryParams as Record<string, unknown>)}`) as Promise<listCursoredResponse>;
+export function listCursored(queryParams?: listCursoredQueryParams): Promise<listCursoredResponse> {
+  return customInstance({ url: `/cursored${buildQuery(queryParams as Record<string, unknown>)}`, method: 'GET' }) as Promise<listCursoredResponse>;
 }
 
-export function updateText(client: CustomClient, body: updateTextBody): Promise<void> {
-  return client('PUT', `/text-upload`, {
+export function updateText(body: updateTextBody): Promise<void> {
+  return customInstance({ url: `/text-upload`, method: 'PUT',
     headers: { 'Content-Type': 'text/plain' },
-    body: String(body),
+    data: String(body),
   }) as Promise<void>;
 }
