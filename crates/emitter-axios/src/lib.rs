@@ -140,7 +140,10 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
             let styles: Vec<String> = array_params
                 .iter()
                 .map(|p| {
-                    let style = match p.array_style.as_ref().unwrap() {
+                    let Some(array_style) = p.array_style.as_ref() else {
+                        return String::new();
+                    };
+                    let style = match array_style {
                         ArrayStyle::Comma => "comma",
                         ArrayStyle::Multi => "multi",
                         ArrayStyle::Brackets => "brackets",

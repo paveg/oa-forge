@@ -95,17 +95,29 @@ fn resolve_external_refs(
             continue; // Local ref, skip
         }
 
-        let resolved_path = base_dir.join(&file_part);
-        let canonical = resolved_path.display().to_string();
+        // Reject URL-scheme refs (potential SSRF surface if networking is ever added)
+        if file_part.contains("://") {
+            continue;
+        }
 
-        if visited_files.contains(&canonical) {
+        let resolved_path = base_dir.join(&file_part);
+
+        // Canonicalize to prevent path traversal via `../` and detect symlink loops
+        let canonical =
+            std::fs::canonicalize(&resolved_path).map_err(|e| ParseError::FileRead {
+                path: resolved_path.display().to_string(),
+                source: e,
+            })?;
+        let canonical_str = canonical.display().to_string();
+
+        if visited_files.contains(&canonical_str) {
             continue; // Already processed
         }
-        visited_files.insert(canonical.clone());
+        visited_files.insert(canonical_str);
 
         let ext_content =
-            std::fs::read_to_string(&resolved_path).map_err(|e| ParseError::FileRead {
-                path: resolved_path.display().to_string(),
+            std::fs::read_to_string(&canonical).map_err(|e| ParseError::FileRead {
+                path: canonical.display().to_string(),
                 source: e,
             })?;
 
