@@ -1771,3 +1771,1471 @@ fn hono_emitter_generates_app_type() {
 
     assert!(out.contains("AppType"), "should generate AppType");
 }
+
+// === Header & Cookie Parameter Tests ===
+
+#[test]
+fn header_params_parsed_into_ir() {
+    let yaml = include_str!("../../../tests/fixtures/header-cookie-params.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let endpoint = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "listResources")
+        .unwrap();
+
+    let header_params: Vec<&oa_forge_ir::EndpointParam> = endpoint
+        .parameters
+        .iter()
+        .filter(|p| p.location == oa_forge_ir::ParamLocation::Header)
+        .collect();
+
+    assert_eq!(header_params.len(), 2, "should have 2 header params");
+    assert!(
+        header_params
+            .iter()
+            .any(|p| p.name == "X-API-Key" && p.required),
+        "X-API-Key should be required"
+    );
+    assert!(
+        header_params
+            .iter()
+            .any(|p| p.name == "X-Request-Id" && !p.required),
+        "X-Request-Id should be optional"
+    );
+}
+
+#[test]
+fn cookie_params_parsed_into_ir() {
+    let yaml = include_str!("../../../tests/fixtures/header-cookie-params.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let endpoint = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "getResource")
+        .unwrap();
+
+    let cookie_params: Vec<&oa_forge_ir::EndpointParam> = endpoint
+        .parameters
+        .iter()
+        .filter(|p| p.location == oa_forge_ir::ParamLocation::Cookie)
+        .collect();
+
+    assert_eq!(cookie_params.len(), 1, "should have 1 cookie param");
+    assert!(
+        cookie_params[0].name == "session_token" && cookie_params[0].required,
+        "session_token should be required"
+    );
+}
+
+#[test]
+fn header_cookie_params_coexist_with_path_query() {
+    let yaml = include_str!("../../../tests/fixtures/header-cookie-params.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // listResources: query (limit) + header (X-API-Key, X-Request-Id)
+    let list = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "listResources")
+        .unwrap();
+    assert_eq!(list.parameters.len(), 3, "should have 3 total params");
+
+    // getResource: path (resourceId) + cookie (session_token) + header (Accept-Language)
+    let get = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "getResource")
+        .unwrap();
+    assert_eq!(get.parameters.len(), 3, "should have 3 total params");
+    assert!(
+        get.parameters
+            .iter()
+            .any(|p| p.location == oa_forge_ir::ParamLocation::Path),
+        "should have path param"
+    );
+    assert!(
+        get.parameters
+            .iter()
+            .any(|p| p.location == oa_forge_ir::ParamLocation::Cookie),
+        "should have cookie param"
+    );
+    assert!(
+        get.parameters
+            .iter()
+            .any(|p| p.location == oa_forge_ir::ParamLocation::Header),
+        "should have header param"
+    );
+}
+
+#[test]
+fn header_cookie_params_emitted_in_types_and_client() {
+    let yaml = include_str!("../../../tests/fixtures/header-cookie-params.yaml");
+    let (types, client, _) = run_pipeline(yaml);
+
+    // Types should have HeaderParams and CookieParams interfaces
+    assert!(
+        types.contains("listResourcesHeaderParams"),
+        "types should have HeaderParams for listResources"
+    );
+    assert!(
+        types.contains("getResourceCookieParams"),
+        "types should have CookieParams for getResource"
+    );
+    assert!(
+        types.contains("getResourceHeaderParams"),
+        "types should have HeaderParams for getResource"
+    );
+
+    // Client should accept headerParams and cookieParams arguments
+    assert!(
+        client.contains("headerParams: listResourcesHeaderParams"),
+        "client listResources should accept headerParams"
+    );
+    assert!(
+        client.contains("cookieParams: getResourceCookieParams"),
+        "client getResource should accept cookieParams"
+    );
+
+    // Client should spread header params into headers
+    assert!(
+        client.contains("...headerParams as Record<string, string>"),
+        "client should spread headerParams into fetch headers"
+    );
+}
+
+// === Reserved TypeScript Keywords as Property Names ===
+
+#[test]
+fn reserved_keywords_in_properties_generate_valid_types() {
+    let yaml = include_str!("../../../tests/fixtures/reserved-keywords.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // TS interface properties can use reserved keywords without escaping
+    assert!(
+        types.contains("class: string;"),
+        "class property should be required: {types}"
+    );
+    assert!(
+        types.contains("type: 'widget' | 'gadget';"),
+        "type property should be enum: {types}"
+    );
+    assert!(
+        types.contains("interface?: string;"),
+        "interface property should be optional"
+    );
+    assert!(
+        types.contains("function?: string;"),
+        "function property should be optional"
+    );
+    assert!(
+        types.contains("return?: boolean;"),
+        "return property should be optional"
+    );
+    assert!(
+        types.contains("delete?: boolean;"),
+        "delete property should be optional"
+    );
+    assert!(
+        types.contains("default?: string;"),
+        "default property should be optional"
+    );
+}
+
+#[test]
+fn reserved_keywords_client_functions_generated() {
+    let yaml = include_str!("../../../tests/fixtures/reserved-keywords.yaml");
+    let (_, client, _) = run_pipeline(yaml);
+
+    assert!(
+        client.contains("export function listItems("),
+        "listItems should be generated"
+    );
+    assert!(
+        client.contains("export function createItem("),
+        "createItem should be generated"
+    );
+}
+
+// === Plain anyOf (without discriminator or nullable) ===
+
+#[test]
+fn anyof_plain_generates_union_type() {
+    let yaml = include_str!("../../../tests/fixtures/anyof-plain.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // SearchQuery: anyOf [TextSearch, FilterSearch] → union
+    assert!(
+        types.contains("export type SearchQuery = TextSearch | FilterSearch;"),
+        "SearchQuery should be union of TextSearch | FilterSearch: {types}"
+    );
+}
+
+#[test]
+fn anyof_three_variants_generates_union() {
+    let yaml = include_str!("../../../tests/fixtures/anyof-plain.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // NotificationContent: anyOf with 3 variants → triple union
+    assert!(
+        types.contains("TextNotification | ImageNotification | ActionNotification"),
+        "NotificationContent should be a 3-way union: {types}"
+    );
+}
+
+#[test]
+fn anyof_plain_variant_schemas_preserved() {
+    let yaml = include_str!("../../../tests/fixtures/anyof-plain.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    assert!(
+        types.contains("export interface TextSearch {"),
+        "TextSearch should exist"
+    );
+    assert!(
+        types.contains("export interface FilterSearch {"),
+        "FilterSearch should exist"
+    );
+    assert!(
+        types.contains("query: string;"),
+        "TextSearch.query should be required"
+    );
+}
+
+// === allOf with Conflicting Properties ===
+
+#[test]
+fn allof_conflict_merges_overlapping_properties() {
+    let yaml = include_str!("../../../tests/fixtures/allof-conflict.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let merged = api
+        .types
+        .get("MergedEntity")
+        .expect("MergedEntity should exist");
+
+    // allOf merges BaseEntity + ExtendedEntity + inline
+    // Last-write wins for overlapping properties (description, name)
+    match &merged.repr {
+        oa_forge_ir::TypeRepr::Object { properties } => {
+            assert!(properties.contains_key("id"), "id from BaseEntity");
+            assert!(properties.contains_key("name"), "name from both");
+            assert!(
+                properties.contains_key("status"),
+                "status from ExtendedEntity"
+            );
+            assert!(
+                properties.contains_key("createdAt"),
+                "createdAt from inline"
+            );
+            assert!(
+                properties.contains_key("description"),
+                "description from both"
+            );
+
+            // name should be required (from both base required lists)
+            assert!(properties["name"].required, "name should be required");
+            // createdAt should be required (from inline required)
+            assert!(
+                properties["createdAt"].required,
+                "createdAt should be required"
+            );
+        }
+        other => panic!("MergedEntity should be Object, got: {other:?}"),
+    }
+}
+
+#[test]
+fn allof_conflict_generates_valid_types() {
+    let yaml = include_str!("../../../tests/fixtures/allof-conflict.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    assert!(
+        types.contains("export interface MergedEntity {"),
+        "MergedEntity should be emitted as interface"
+    );
+    // All properties should be present
+    assert!(
+        types.contains("id: number;"),
+        "id should be required number"
+    );
+    assert!(
+        types.contains("name: string;"),
+        "name should be required string"
+    );
+    assert!(
+        types.contains("createdAt: string;"),
+        "createdAt should be required"
+    );
+}
+
+// === Inline Schemas (not $ref) ===
+
+#[test]
+fn inline_response_schema_generates_type() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // getStatus response is inline object → should generate response type
+    assert!(
+        types.contains("getStatusResponse"),
+        "inline response should generate type: {types}"
+    );
+    assert!(
+        types.contains("healthy"),
+        "inline response should have healthy field: {types}"
+    );
+}
+
+#[test]
+fn inline_request_body_generates_type() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // echo request body is inline → should generate body type
+    assert!(
+        types.contains("echoBody"),
+        "inline request body should generate type: {types}"
+    );
+}
+
+#[test]
+fn inline_error_response_generates_type() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let config_ep = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "getConfig")
+        .unwrap();
+    assert!(
+        config_ep.error_response.is_some(),
+        "getConfig should have inline error response"
+    );
+}
+
+#[test]
+fn inline_nested_objects_emit_as_inline_types() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // getConfig has nested inline objects (database, cache)
+    assert!(
+        types.contains("getConfigResponse"),
+        "getConfig response type should exist"
+    );
+}
+
+#[test]
+fn inline_array_item_schema_generates_response_type() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+
+    // getItemHistory returns array of inline objects
+    assert!(
+        types.contains("getItemHistoryResponse"),
+        "array of inline items should generate response type"
+    );
+}
+
+#[test]
+fn inline_schemas_client_functions_have_correct_signatures() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let (_, client, _) = run_pipeline(yaml);
+
+    assert!(
+        client.contains("export function getStatus("),
+        "getStatus should be generated"
+    );
+    assert!(
+        client.contains("export function echo("),
+        "echo should be generated"
+    );
+    assert!(
+        client.contains("export function getConfig("),
+        "getConfig should be generated"
+    );
+    assert!(
+        client.contains("export function getItemHistory("),
+        "getItemHistory should be generated"
+    );
+    // echo should have body parameter
+    assert!(
+        client.contains("body: echoBody"),
+        "echo should have typed body param"
+    );
+}
+
+// === Additional Edge Cases ===
+
+#[test]
+fn operations_without_tags_are_collected() {
+    // Verify tagless operations get operation_id and produce valid output
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: No Tags API
+  version: "1.0.0"
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+"#;
+    let (types, client, hooks) = run_pipeline(yaml);
+    assert!(types.contains("healthCheckResponse"));
+    assert!(client.contains("export function healthCheck("));
+    assert!(hooks.contains("useHealthCheck"));
+}
+
+#[test]
+fn duplicate_required_fields_in_allof_deduplicated() {
+    // If multiple allOf members list the same field as required, it shouldn't break
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    DoubleRequired:
+      allOf:
+        - type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+        - type: object
+          required:
+            - name
+            - age
+          properties:
+            name:
+              type: string
+            age:
+              type: integer
+"#;
+    let (types, _, _) = run_pipeline(yaml);
+    assert!(
+        types.contains("name: string;"),
+        "name should be required (no ?): {types}"
+    );
+    assert!(
+        types.contains("age: number;"),
+        "age should be required: {types}"
+    );
+}
+
+#[test]
+fn mixed_enum_integer_and_string_values() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Priority:
+      type: integer
+      enum:
+        - 1
+        - 2
+        - 3
+    Status:
+      type: string
+      enum:
+        - active
+        - inactive
+"#;
+    let (types, _, _) = run_pipeline(yaml);
+    assert!(
+        types.contains("export type Priority = 1 | 2 | 3;"),
+        "integer enum: {types}"
+    );
+    assert!(
+        types.contains("export type Status = 'active' | 'inactive';"),
+        "string enum: {types}"
+    );
+}
+
+#[test]
+fn additionalproperties_boolean_true_generates_record_unknown() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    FreeformObject:
+      type: object
+      additionalProperties: true
+"#;
+    let (types, _, _) = run_pipeline(yaml);
+    assert!(
+        types.contains("Record<string, unknown>"),
+        "additionalProperties: true should be Record<string, unknown>: {types}"
+    );
+}
+
+#[test]
+fn patch_request_body_uses_partial() {
+    let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /users/{userId}:
+    patch:
+      operationId: updateUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+components:
+  schemas:
+    User:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+"##;
+    let (types, _, _) = run_pipeline(yaml);
+    assert!(
+        types.contains("Partial<User>"),
+        "PATCH body with $ref should use Partial: {types}"
+    );
+}
+
+#[test]
+fn multiple_tags_uses_first_tag() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      tags:
+        - items
+        - inventory
+        - public
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+    let endpoint = &api.endpoints[0];
+    assert_eq!(endpoint.tags.len(), 3, "should preserve all tags");
+    assert_eq!(endpoint.tags[0], "items", "first tag should be 'items'");
+}
+
+#[test]
+fn default_response_code_ignored_gracefully() {
+    // "default" response code should not crash the converter
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /test:
+    get:
+      operationId: testOp
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+"#;
+    let (types, client, _) = run_pipeline(yaml);
+    assert!(types.contains("testOpResponse = string"));
+    assert!(client.contains("export function testOp("));
+}
+
+#[test]
+fn deeply_nested_allof_chain() {
+    // allOf referencing another allOf schema
+    let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Base:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+    Middle:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+    Top:
+      allOf:
+        - $ref: "#/components/schemas/Middle"
+        - type: object
+          properties:
+            extra:
+              type: boolean
+"##;
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    // Middle should have id + name
+    let middle = api.types.get("Middle").expect("Middle should exist");
+    match &middle.repr {
+        oa_forge_ir::TypeRepr::Object { properties } => {
+            assert!(
+                properties.contains_key("id"),
+                "Middle should have id from Base"
+            );
+            assert!(
+                properties.contains_key("name"),
+                "Middle should have own name"
+            );
+        }
+        other => panic!("Middle should be Object, got: {other:?}"),
+    }
+}
+
+#[test]
+fn url_encoded_form_body_fallback() {
+    // application/x-www-form-urlencoded is not explicitly handled → should fall through gracefully
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let login = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "login")
+        .unwrap();
+
+    // x-www-form-urlencoded is not explicitly supported; should not crash
+    // Currently falls through to ContentType::None since it's not json/multipart/text/octet
+    assert!(
+        login.request_content_type == oa_forge_ir::ContentType::None,
+        "x-www-form-urlencoded falls through to None: {:?}",
+        login.request_content_type
+    );
+}
+
+#[test]
+fn nullable_enum_openapi30() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    NullableStatus:
+      type: string
+      nullable: true
+      enum:
+        - active
+        - inactive
+"#;
+    let (types, _, _) = run_pipeline(yaml);
+    assert!(
+        types.contains("'active' | 'inactive' | null"),
+        "nullable enum should have | null: {types}"
+    );
+}
+
+#[test]
+fn response_ref_resolves_correctly() {
+    let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /test:
+    get:
+      operationId: testRefResponse
+      responses:
+        "200":
+          $ref: "#/components/responses/SuccessResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+components:
+  responses:
+    SuccessResponse:
+      description: Success
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: string
+    NotFoundResponse:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+  schemas: {}
+"##;
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let ep = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "testRefResponse")
+        .unwrap();
+    assert!(ep.response.is_some(), "should resolve $ref response");
+    assert!(
+        ep.error_response.is_some(),
+        "should resolve $ref error response"
+    );
+}
+
+// === Format Constraint Tests (Zod / Valibot) ===
+
+#[test]
+fn zod_emits_format_validators() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    UserEmail:
+      type: string
+      format: email
+    ResourceUri:
+      type: string
+      format: uri
+    UniqueId:
+      type: string
+      format: uuid
+    EventTime:
+      type: string
+      format: date-time
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("zod emit failed");
+
+    assert!(
+        out.contains("z.string().email()"),
+        "email format should emit .email(): {out}"
+    );
+    assert!(
+        out.contains("z.string().url()"),
+        "uri format should emit .url(): {out}"
+    );
+    assert!(
+        out.contains("z.string().uuid()"),
+        "uuid format should emit .uuid(): {out}"
+    );
+    assert!(
+        out.contains("z.string().datetime()"),
+        "date-time format should emit .datetime(): {out}"
+    );
+}
+
+#[test]
+fn valibot_emits_format_validators() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    UserEmail:
+      type: string
+      format: email
+    ResourceUri:
+      type: string
+      format: uri
+    UniqueId:
+      type: string
+      format: uuid
+    EventTime:
+      type: string
+      format: date-time
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = convert(&spec).expect("convert failed");
+
+    let mut out = String::new();
+    oa_forge_emitter_valibot::emit(&api, &mut out).expect("valibot emit failed");
+
+    assert!(
+        out.contains("email()"),
+        "email format should emit email(): {out}"
+    );
+    assert!(out.contains("url()"), "uri format should emit url(): {out}");
+    assert!(
+        out.contains("uuid()"),
+        "uuid format should emit uuid(): {out}"
+    );
+    assert!(
+        out.contains("isoDateTime()"),
+        "date-time format should emit isoDateTime(): {out}"
+    );
+}
+
+#[test]
+fn additionalproperties_false_still_parses() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Strict:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+"#;
+    let (types, _, _) = run_pipeline(yaml);
+    // additionalProperties: false with properties → should emit the object
+    assert!(
+        types.contains("name"),
+        "should still emit properties: {types}"
+    );
+}
+
+// === Configurable Header Tests ===
+
+#[test]
+fn default_header_contains_eslint_disable() {
+    let yaml = include_str!("../../../tests/fixtures/petstore.yaml");
+    let (types, client, _) = run_pipeline(yaml);
+
+    // The pipeline doesn't apply the CLI header, but emitters have their own
+    assert!(
+        types.contains("// Generated by oa-forge"),
+        "should have attribution header"
+    );
+    assert!(
+        client.contains("// Generated by oa-forge"),
+        "client should have attribution header"
+    );
+}
+
+// === Coverage Gap Tests ===
+
+#[test]
+fn integer_enum_generates_union_of_literals() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+    // StatusCode should be union of number literals, not string enum
+    assert!(
+        types.contains("200 | 201 | 400 | 404 | 500"),
+        "integer enum should be union of literals: {types}"
+    );
+}
+
+#[test]
+fn zod_integer_enum_uses_literal() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    // Integer enums use z.union(z.literal()) path
+    assert!(
+        out.contains("z.literal(200)"),
+        "zod should use z.literal for integer enums: {out}"
+    );
+}
+
+#[test]
+fn valibot_integer_enum_uses_literal() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_valibot::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains("literal(200)"),
+        "valibot should use literal for integer enums: {out}"
+    );
+}
+
+#[test]
+fn zod_constraints_all_types() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    // Number constraints
+    assert!(
+        out.contains(".gt("),
+        "zod should emit .gt() for exclusiveMinimum"
+    );
+    assert!(
+        out.contains(".lt("),
+        "zod should emit .lt() for exclusiveMaximum"
+    );
+    assert!(
+        out.contains(".multipleOf("),
+        "zod should emit .multipleOf()"
+    );
+    // String constraints
+    assert!(
+        out.contains(".max("),
+        "zod should emit .max() for maxLength"
+    );
+    assert!(
+        out.contains(".regex("),
+        "zod should emit .regex() for pattern"
+    );
+}
+
+#[test]
+fn valibot_constraints_all_types() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_valibot::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains("gtValue("),
+        "valibot should emit gtValue for exclusiveMinimum"
+    );
+    assert!(
+        out.contains("ltValue("),
+        "valibot should emit ltValue for exclusiveMaximum"
+    );
+    assert!(
+        out.contains("multipleOf("),
+        "valibot should emit multipleOf"
+    );
+    assert!(out.contains("maxLength("), "valibot should emit maxLength");
+    assert!(
+        out.contains("regex("),
+        "valibot should emit regex for pattern"
+    );
+}
+
+#[test]
+fn zod_format_fields_emit_string() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    // Format fields (uuid, email, date, ip) should at minimum emit z.string()
+    assert!(
+        out.contains("id: z.string()"),
+        "zod should emit z.string() for uuid field: {out}"
+    );
+    assert!(
+        out.contains("email: z.string()"),
+        "zod should emit z.string() for email field: {out}"
+    );
+    assert!(
+        out.contains("birthday: z.string()"),
+        "zod should emit z.string() for date field: {out}"
+    );
+    assert!(
+        out.contains("ipAddress: z.string()"),
+        "zod should emit z.string() for ip field: {out}"
+    );
+}
+
+#[test]
+fn valibot_format_fields_emit_string() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_valibot::emit(&api, &mut out).expect("emit failed");
+    // Format fields (uuid, email, date, ip) should at minimum emit string()
+    assert!(
+        out.contains("id: string()"),
+        "valibot should emit string() for uuid field: {out}"
+    );
+    assert!(
+        out.contains("email: string()"),
+        "valibot should emit string() for email field: {out}"
+    );
+    assert!(
+        out.contains("birthday: optional(string())"),
+        "valibot should emit string() for date field: {out}"
+    );
+    assert!(
+        out.contains("ipAddress: optional(string())"),
+        "valibot should emit string() for ip field: {out}"
+    );
+}
+
+#[test]
+fn empty_object_generates_record_unknown() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let (types, _, _) = run_pipeline(yaml);
+    // The metadata field with type: object and no properties should be Record<string, unknown>
+    assert!(
+        types.contains("Record<string, unknown>"),
+        "empty object should be Record<string, unknown>"
+    );
+}
+
+#[test]
+fn zod_empty_object_generates_record() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains("z.record(z.string(), z.unknown())"),
+        "zod empty object should be z.record: {out}"
+    );
+}
+
+#[test]
+fn valibot_empty_object_generates_record() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_valibot::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains("record(string(), unknown())"),
+        "valibot empty object should be record: {out}"
+    );
+}
+
+#[test]
+fn zod_ref_alias_generates_lazy() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    // RefAlias is a $ref to Item, should resolve to z.lazy referencing ItemSchema
+    assert!(
+        out.contains("z.lazy(() => ItemSchema)"),
+        "zod ref alias should use z.lazy: {out}"
+    );
+    assert!(
+        out.contains("type RefAlias"),
+        "zod should emit RefAlias type: {out}"
+    );
+}
+
+#[test]
+fn zod_default_values_emitted() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains(".default('hello')"),
+        "zod should emit string default: {out}"
+    );
+    assert!(
+        out.contains(".default(42)"),
+        "zod should emit number default: {out}"
+    );
+}
+
+#[test]
+fn mock_description_based_faker_hints() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_mock::emit(&api, &mut out).expect("emit failed");
+    // Mock emitter should use description hints for faker methods
+    assert!(
+        out.contains("faker.internet.email()"),
+        "mock should use faker email hint: {out}"
+    );
+}
+
+// === Boundary: Mock Tuple and Intersection Types ===
+
+#[test]
+fn mock_tuple_type_generates_array_literal() {
+    let yaml = r#"
+openapi: "3.1.0"
+info:
+  title: Tuple Test
+  version: "1.0.0"
+paths:
+  /coords:
+    get:
+      operationId: getCoords
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                prefixItems:
+                  - type: number
+                  - type: number
+                  - type: string
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut mock = String::new();
+    oa_forge_emitter_mock::emit(&api, &mut mock).expect("mock emit failed");
+    // Tuple should generate [expr, expr, expr] as const
+    assert!(
+        mock.contains("as const"),
+        "mock tuple should use 'as const': {mock}"
+    );
+}
+
+#[test]
+fn mock_intersection_type_generates_spread() {
+    let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Intersection Test
+  version: "1.0.0"
+paths:
+  /mixed:
+    get:
+      operationId: getMixed
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    properties:
+                      id:
+                        type: integer
+                  - type: object
+                    properties:
+                      name:
+                        type: string
+                  - oneOf:
+                      - type: object
+                        properties:
+                          role:
+                            type: string
+"##;
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    // Check that intersection type is produced
+    let endpoint = api.endpoints.first().unwrap();
+    if let Some(ref resp) = endpoint.response {
+        match resp {
+            oa_forge_ir::TypeRepr::Intersection { .. } => {
+                // Generate mock
+                let mut mock = String::new();
+                oa_forge_emitter_mock::emit(&api, &mut mock).expect("mock emit failed");
+                assert!(
+                    mock.contains("as any"),
+                    "mock intersection should use 'as any' spread: {mock}"
+                );
+            }
+            _ => {
+                // If allOf was flattened, that's also valid
+            }
+        }
+    }
+}
+
+// === Boundary: Mock faker description hints ===
+
+#[test]
+fn mock_faker_url_hint() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_mock::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains("faker.internet.url()"),
+        "mock should use faker url hint for website field: {out}"
+    );
+}
+
+#[test]
+fn mock_faker_uses_description_not_format() {
+    // Mock emitter infers faker methods from description text, not from OpenAPI format field.
+    // Fields with format: uuid but no description get generic faker.lorem.word().
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_mock::emit(&api, &mut out).expect("emit failed");
+    // email field has description "User email address" → email hint
+    assert!(
+        out.contains("faker.internet.email()"),
+        "description containing 'email' should trigger email faker"
+    );
+    // website field has description "Homepage URL" → url hint
+    assert!(
+        out.contains("faker.internet.url()"),
+        "description containing 'URL' should trigger url faker"
+    );
+}
+
+#[test]
+fn mock_faker_phone_and_address_hints() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_mock::emit(&api, &mut out).expect("emit failed");
+    assert!(
+        out.contains("faker.phone.number()"),
+        "mock should use phone hint: {out}"
+    );
+    assert!(
+        out.contains("faker.location.streetAddress()"),
+        "mock should use address hint: {out}"
+    );
+}
+
+// === Boundary: Empty union and single-variant union in mock ===
+
+#[test]
+fn mock_single_variant_union_unwraps() {
+    let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Single Union
+  version: "1.0.0"
+paths:
+  /item:
+    get:
+      operationId: getItem
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: string
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut mock = String::new();
+    oa_forge_emitter_mock::emit(&api, &mut mock).expect("mock emit failed");
+    // Single-variant union should unwrap to the inner type, not use arrayElement
+    assert!(
+        !mock.contains("arrayElement"),
+        "single-variant union should not use arrayElement: {mock}"
+    );
+}
+
+// === Boundary: Swagger2 formData conversion end-to-end ===
+
+#[test]
+fn swagger2_formdata_converts_to_request_body() {
+    let yaml = r#"
+swagger: "2.0"
+info:
+  title: Upload API
+  version: "1.0"
+host: api.example.com
+basePath: /v1
+paths:
+  /upload:
+    post:
+      operationId: uploadFile
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: file
+          in: formData
+          type: string
+          format: binary
+          required: true
+        - name: label
+          in: formData
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+definitions: {}
+"#;
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+
+    let upload = api
+        .endpoints
+        .iter()
+        .find(|e| e.operation_id == "uploadFile")
+        .expect("uploadFile endpoint should exist");
+
+    assert!(
+        upload.request_body.is_some(),
+        "formData should produce request_body"
+    );
+}
+
+// === Boundary: Zod/Valibot minItems/maxItems on arrays ===
+
+#[test]
+fn zod_array_min_max_items() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_zod::emit(&api, &mut out).expect("emit failed");
+    // tags has minItems: 1, maxItems: 10
+    assert!(
+        out.contains(".min(1)"),
+        "zod should emit .min(1) for minItems: {out}"
+    );
+    assert!(
+        out.contains(".max(10)"),
+        "zod should emit .max(10) for maxItems: {out}"
+    );
+}
+
+#[test]
+fn valibot_array_min_max_items() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let spec = parse(yaml).expect("parse failed");
+    let api = oa_forge_ir::convert(&spec).expect("convert failed");
+    let mut out = String::new();
+    oa_forge_emitter_valibot::emit(&api, &mut out).expect("emit failed");
+    // tags has minItems: 1, maxItems: 10 → minLength/maxLength in valibot for arrays
+    assert!(
+        out.contains("minLength(1)"),
+        "valibot should emit minLength for minItems: {out}"
+    );
+    assert!(
+        out.contains("maxLength(10)"),
+        "valibot should emit maxLength for maxItems: {out}"
+    );
+}

@@ -311,6 +311,138 @@ definitions:
     }
 
     #[test]
+    fn converts_formdata_params_to_request_body() {
+        let swagger = serde_yaml::from_str::<Value>(
+            r#"
+swagger: "2.0"
+info:
+  title: Test
+  version: "1.0"
+host: api.example.com
+basePath: /v1
+paths:
+  /upload:
+    post:
+      operationId: uploadFile
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: file
+          in: formData
+          type: string
+          format: binary
+          required: true
+        - name: description
+          in: formData
+          type: string
+          required: false
+      responses:
+        "200":
+          description: OK
+definitions: {}
+"#,
+        )
+        .unwrap();
+
+        let openapi = convert_to_openapi3(swagger).unwrap();
+        let upload_op = openapi
+            .get("paths")
+            .unwrap()
+            .get("/upload")
+            .unwrap()
+            .get("post")
+            .unwrap();
+
+        // formData should be converted to requestBody with multipart/form-data
+        let request_body = upload_op.get("requestBody").unwrap();
+        let content = request_body.get("content").unwrap();
+        assert!(
+            content.get("multipart/form-data").is_some(),
+            "formData should produce multipart/form-data requestBody"
+        );
+
+        let schema = content
+            .get("multipart/form-data")
+            .unwrap()
+            .get("schema")
+            .unwrap();
+        let props = schema.get("properties").unwrap();
+        assert!(props.get("file").is_some(), "file property should exist");
+        assert!(
+            props.get("description").is_some(),
+            "description property should exist"
+        );
+
+        // Required array should contain "file" but not "description"
+        let required = schema.get("required").unwrap().as_sequence().unwrap();
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(required_names.contains(&"file"), "file should be required");
+        assert!(
+            !required_names.contains(&"description"),
+            "description should not be required"
+        );
+
+        // formData params should NOT appear in parameters
+        assert!(
+            upload_op.get("parameters").is_none(),
+            "formData params should be removed from parameters"
+        );
+    }
+
+    #[test]
+    fn converts_swagger2_without_paths() {
+        let swagger = serde_yaml::from_str::<Value>(
+            r#"
+swagger: "2.0"
+info:
+  title: Test
+  version: "1.0"
+host: api.example.com
+definitions:
+  Pet:
+    type: object
+"#,
+        )
+        .unwrap();
+
+        let openapi = convert_to_openapi3(swagger).unwrap();
+        // Should have empty paths, not fail
+        let paths = openapi.get("paths").unwrap().as_mapping().unwrap();
+        assert!(
+            paths.is_empty(),
+            "missing paths should produce empty mapping"
+        );
+    }
+
+    #[test]
+    fn converts_swagger2_global_parameters() {
+        let swagger = serde_yaml::from_str::<Value>(
+            r#"
+swagger: "2.0"
+info:
+  title: Test
+  version: "1.0"
+host: api.example.com
+paths: {}
+parameters:
+  PageParam:
+    name: page
+    in: query
+    type: integer
+definitions: {}
+"#,
+        )
+        .unwrap();
+
+        let openapi = convert_to_openapi3(swagger).unwrap();
+        let components = openapi.get("components").unwrap();
+        assert!(
+            components.get("parameters").is_some(),
+            "global parameters should be preserved in components"
+        );
+    }
+
+    #[test]
     fn rewrites_definition_refs() {
         let value = serde_yaml::from_str::<Value>(r##"{"$ref": "#/definitions/Pet"}"##).unwrap();
         let rewritten = rewrite_definition_refs(value);

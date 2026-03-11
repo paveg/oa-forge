@@ -215,13 +215,22 @@ fn convert_schema(schema: &openapi::Schema, ctx: &mut Ctx) -> TypeRepr {
         }
         Some("object") | None if !schema.properties.is_empty() => convert_object(schema, ctx),
         Some("object") | None if schema.additional_properties.is_some() => {
-            let value = schema
-                .additional_properties
-                .as_ref()
-                .map(|ap| convert_schema_or_ref(ap, ctx))
-                .unwrap_or(TypeRepr::Any);
-            TypeRepr::Map {
-                value: Box::new(value),
+            match &schema.additional_properties {
+                Some(openapi::AdditionalProperties::Bool(false)) => TypeRepr::Map {
+                    value: Box::new(TypeRepr::Any),
+                },
+                Some(openapi::AdditionalProperties::Bool(true)) => TypeRepr::Map {
+                    value: Box::new(TypeRepr::Any),
+                },
+                Some(openapi::AdditionalProperties::Schema(s)) => {
+                    let value = convert_schema_or_ref(s, ctx);
+                    TypeRepr::Map {
+                        value: Box::new(value),
+                    }
+                }
+                None => TypeRepr::Map {
+                    value: Box::new(TypeRepr::Any),
+                },
             }
         }
         Some("object") => TypeRepr::Map {

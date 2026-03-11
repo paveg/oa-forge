@@ -34,3 +34,63 @@ fn snapshot_oneof_discriminator_zod() {
     let output = run_pipeline("oneof-discriminator.yaml");
     insta::assert_snapshot!(output);
 }
+
+#[test]
+fn snapshot_edge_cases_zod() {
+    let output = run_pipeline("edge-cases.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_openapi31_zod() {
+    let output = run_pipeline("openapi31.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_multipart_paginated_zod() {
+    let output = run_pipeline("multipart-paginated.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_header_cookie_params_zod() {
+    let output = run_pipeline("header-cookie-params.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_allof_conflict_zod() {
+    let output = run_pipeline("allof-conflict.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_anyof_plain_zod() {
+    let output = run_pipeline("anyof-plain.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_inline_schemas_zod() {
+    let output = run_pipeline("inline-schemas.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_reserved_keywords_zod() {
+    let output = run_pipeline("reserved-keywords.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_large_scale_zod() {
+    let output = run_pipeline("large-scale.yaml");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_coverage_gaps_zod() {
+    let output = run_pipeline("coverage-gaps.yaml");
+    insta::assert_snapshot!(output);
+}

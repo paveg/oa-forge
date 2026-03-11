@@ -229,7 +229,7 @@ fn collect_refs_from_schema_or_ref(schema_or_ref: &openapi::SchemaOrRef, refs: &
                     collect_refs_from_schema_or_ref(s, refs);
                 }
             }
-            if let Some(ap) = &schema.additional_properties {
+            if let Some(openapi::AdditionalProperties::Schema(ap)) = &schema.additional_properties {
                 collect_refs_from_schema_or_ref(ap, refs);
             }
         }
@@ -297,7 +297,9 @@ fn rewrite_refs_in_schema_or_ref(schema_or_ref: &mut openapi::SchemaOrRef, file_
                     rewrite_refs_in_schema_or_ref(s, file_part);
                 }
             }
-            if let Some(ap) = &mut schema.additional_properties {
+            if let Some(openapi::AdditionalProperties::Schema(ap)) =
+                &mut schema.additional_properties
+            {
                 rewrite_refs_in_schema_or_ref(ap, file_part);
             }
         }

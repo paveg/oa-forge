@@ -1,0 +1,130 @@
+openapi: "3.0.3"
+info:
+  title: Inline Schemas API
+  version: "1.0.0"
+paths:
+  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "200":
+          description: Server status (inline schema, not $ref)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - healthy
+                  - version
+                properties:
+                  healthy:
+                    type: boolean
+                  version:
+                    type: string
+                  uptime:
+                    type: number
+  /echo:
+    post:
+      operationId: echo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                timestamp:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Echoed message
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - message
+                  - receivedAt
+                properties:
+                  message:
+                    type: string
+                  receivedAt:
+                    type: string
+                    format: date-time
+  /config:
+    get:
+      operationId: getConfig
+      responses:
+        "200":
+          description: Config as nested inline schema
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - database
+                properties:
+                  database:
+                    type: object
+                    required:
+                      - host
+                      - port
+                    properties:
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                  cache:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      ttl:
+                        type: integer
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: string
+  /items/{itemId}/history:
+    get:
+      operationId: getItemHistory
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: History entries with inline array item schema
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - action
+                    - timestamp
+                  properties:
+                    action:
+                      type: string
+                    timestamp:
+                      type: string
+                      format: date-time
+                    actor:
+                      type: string

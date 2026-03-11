@@ -1,0 +1,100 @@
+openapi: "3.0.3"
+info:
+  title: Plain anyOf API
+  version: "1.0.0"
+paths:
+  /search:
+    post:
+      operationId: search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchQuery"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SearchResult"
+  /notifications:
+    get:
+      operationId: listNotifications
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationContent"
+components:
+  schemas:
+    SearchQuery:
+      description: Search by text or filter
+      anyOf:
+        - $ref: "#/components/schemas/TextSearch"
+        - $ref: "#/components/schemas/FilterSearch"
+    TextSearch:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+    FilterSearch:
+      type: object
+      required:
+        - filters
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Filter"
+    Filter:
+      type: object
+      required:
+        - field
+        - value
+      properties:
+        field:
+          type: string
+        value:
+          type: string
+    NotificationContent:
+      description: Notification can be text, image, or action
+      anyOf:
+        - $ref: "#/components/schemas/TextNotification"
+        - $ref: "#/components/schemas/ImageNotification"
+        - $ref: "#/components/schemas/ActionNotification"
+    TextNotification:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+    ImageNotification:
+      type: object
+      required:
+        - imageUrl
+      properties:
+        imageUrl:
+          type: string
+          format: uri
+    ActionNotification:
+      type: object
+      required:
+        - label
+        - url
+      properties:
+        label:
+          type: string
+        url:
+          type: string
+          format: uri

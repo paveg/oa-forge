@@ -1,0 +1,123 @@
+openapi: "3.1.0"
+info:
+  title: Coverage Gaps Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            exclusiveMinimum: 1
+            exclusiveMaximum: 100
+            multipleOf: 5
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+            pattern: "^[a-zA-Z0-9]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Item"
+  /items/{itemId}:
+    get:
+      operationId: getItem
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+components:
+  schemas:
+    StatusCode:
+      type: integer
+      enum: [200, 201, 400, 404, 500]
+    MixedEnum:
+      oneOf:
+        - type: string
+          enum: ["active"]
+        - type: integer
+          enum: [0, 1]
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          description: "User email address"
+        website:
+          type: string
+          format: url
+          description: "Homepage URL"
+        createdAt:
+          type: string
+          format: date-time
+        birthday:
+          type: string
+          format: date
+        ipAddress:
+          type: string
+          format: ip
+        phone:
+          type: string
+          description: "Phone number"
+        address:
+          type: string
+          description: "Street address"
+        status:
+          $ref: "#/components/schemas/StatusCode"
+        metadata:
+          type: object
+        score:
+          type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 100
+          multipleOf: 0.5
+        tags:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 10
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[A-Za-z ]+$"
+      required:
+        - id
+        - email
+        - name
+    RefAlias:
+      $ref: "#/components/schemas/Item"
+    DefaultedString:
+      type: string
+      default: "hello"
+    DefaultedNumber:
+      type: integer
+      default: 42

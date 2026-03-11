@@ -1,0 +1,60 @@
+openapi: "3.0.3"
+info:
+  title: allOf Conflict API
+  version: "1.0.0"
+paths:
+  /entities:
+    get:
+      operationId: listEntities
+      responses:
+        "200":
+          description: Entities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MergedEntity"
+components:
+  schemas:
+    BaseEntity:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+    ExtendedEntity:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+          description: Overridden name with description
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        description:
+          type: string
+          description: Detailed description
+    MergedEntity:
+      description: Merges BaseEntity and ExtendedEntity with overlapping properties
+      allOf:
+        - $ref: "#/components/schemas/BaseEntity"
+        - $ref: "#/components/schemas/ExtendedEntity"
+        - type: object
+          required:
+            - createdAt
+          properties:
+            createdAt:
+              type: string
+              format: date-time

@@ -123,43 +123,59 @@ fn emit_typedef(typedef: &TypeDef, out: &mut String) -> Result<(), std::fmt::Err
     Ok(())
 }
 
+/// Emit a params interface (e.g. `FooPathParams`, `FooQueryParams`) for the given location.
+/// When `use_optional` is true, non-required params get `?` suffix.
+fn emit_params_interface(
+    id: &str,
+    suffix: &str,
+    location: ParamLocation,
+    use_optional: bool,
+    endpoint: &Endpoint,
+    out: &mut String,
+) -> Result<(), std::fmt::Error> {
+    let params: Vec<&EndpointParam> = endpoint
+        .parameters
+        .iter()
+        .filter(|p| p.location == location)
+        .collect();
+
+    if params.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(out, "export interface {id}{suffix} {{")?;
+    for p in &params {
+        let optional = if use_optional && !p.required { "?" } else { "" };
+        let ts = type_repr_to_ts(&p.repr);
+        writeln!(out, "  {}{}: {};", p.name, optional, ts)?;
+    }
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
+}
+
 fn emit_endpoint_types(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
 
-    // Path params type
-    let path_params: Vec<&EndpointParam> = endpoint
-        .parameters
-        .iter()
-        .filter(|p| p.location == ParamLocation::Path)
-        .collect();
-
-    if !path_params.is_empty() {
-        writeln!(out, "export interface {id}PathParams {{")?;
-        for p in &path_params {
-            let ts = type_repr_to_ts(&p.repr);
-            writeln!(out, "  {}: {};", p.name, ts)?;
-        }
-        writeln!(out, "}}")?;
-        writeln!(out)?;
-    }
-
-    // Query params type
-    let query_params: Vec<&EndpointParam> = endpoint
-        .parameters
-        .iter()
-        .filter(|p| p.location == ParamLocation::Query)
-        .collect();
-
-    if !query_params.is_empty() {
-        writeln!(out, "export interface {id}QueryParams {{")?;
-        for p in &query_params {
-            let optional = if p.required { "" } else { "?" };
-            let ts = type_repr_to_ts(&p.repr);
-            writeln!(out, "  {}{}: {};", p.name, optional, ts)?;
-        }
-        writeln!(out, "}}")?;
-        writeln!(out)?;
-    }
+    // Path params are always required (no optional marker)
+    emit_params_interface(id, "PathParams", ParamLocation::Path, false, endpoint, out)?;
+    emit_params_interface(id, "QueryParams", ParamLocation::Query, true, endpoint, out)?;
+    emit_params_interface(
+        id,
+        "HeaderParams",
+        ParamLocation::Header,
+        true,
+        endpoint,
+        out,
+    )?;
+    emit_params_interface(
+        id,
+        "CookieParams",
+        ParamLocation::Cookie,
+        true,
+        endpoint,
+        out,
+    )?;
 
     // Response type
     if let Some(response) = &endpoint.response {

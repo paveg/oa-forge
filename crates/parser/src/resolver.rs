@@ -97,6 +97,202 @@ components:
     }
 
     #[test]
+    fn resolve_non_component_ref_returns_none() {
+        let yaml = r#"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Pet:
+      type: object
+      properties:
+        name:
+          type: string
+"#;
+        let spec = parse(yaml).unwrap();
+        // Non-standard $ref path should return None
+        assert!(resolve_ref("#/paths/get", spec.components.as_ref()).is_none());
+        assert!(resolve_ref("#/definitions/Pet", spec.components.as_ref()).is_none());
+        assert!(resolve_ref("", spec.components.as_ref()).is_none());
+    }
+
+    #[test]
+    fn detect_circular_ref_through_array_items() {
+        let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    TreeNode:
+      type: object
+      properties:
+        value:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/TreeNode"
+"##;
+        let spec = parse(yaml).unwrap();
+        let schema = spec
+            .components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .get("TreeNode")
+            .unwrap();
+        let mut visited = HashSet::new();
+        assert!(detect_circular_refs(
+            schema,
+            spec.components.as_ref(),
+            &mut visited
+        ));
+    }
+
+    #[test]
+    fn detect_circular_ref_through_allof() {
+        let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Base:
+      allOf:
+        - type: object
+          properties:
+            name:
+              type: string
+        - $ref: "#/components/schemas/Base"
+"##;
+        let spec = parse(yaml).unwrap();
+        let schema = spec
+            .components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .get("Base")
+            .unwrap();
+        let mut visited = HashSet::new();
+        assert!(detect_circular_refs(
+            schema,
+            spec.components.as_ref(),
+            &mut visited
+        ));
+    }
+
+    #[test]
+    fn detect_circular_ref_through_oneof() {
+        let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Expression:
+      oneOf:
+        - type: object
+          properties:
+            value:
+              type: number
+        - $ref: "#/components/schemas/Expression"
+"##;
+        let spec = parse(yaml).unwrap();
+        let schema = spec
+            .components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .get("Expression")
+            .unwrap();
+        let mut visited = HashSet::new();
+        assert!(detect_circular_refs(
+            schema,
+            spec.components.as_ref(),
+            &mut visited
+        ));
+    }
+
+    #[test]
+    fn non_circular_ref_returns_false() {
+        let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Owner:
+      type: object
+      properties:
+        name:
+          type: string
+    Pet:
+      type: object
+      properties:
+        owner:
+          $ref: "#/components/schemas/Owner"
+"##;
+        let spec = parse(yaml).unwrap();
+        let schema = spec
+            .components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .get("Pet")
+            .unwrap();
+        let mut visited = HashSet::new();
+        assert!(!detect_circular_refs(
+            schema,
+            spec.components.as_ref(),
+            &mut visited
+        ));
+    }
+
+    #[test]
+    fn unresolvable_ref_returns_false() {
+        let yaml = r##"
+openapi: "3.0.3"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Broken:
+      type: object
+      properties:
+        missing:
+          $ref: "#/components/schemas/DoesNotExist"
+"##;
+        let spec = parse(yaml).unwrap();
+        let schema = spec
+            .components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .get("Broken")
+            .unwrap();
+        let mut visited = HashSet::new();
+        assert!(!detect_circular_refs(
+            schema,
+            spec.components.as_ref(),
+            &mut visited
+        ));
+    }
+
+    #[test]
     fn detect_self_reference() {
         let yaml = r##"
 openapi: "3.0.3"

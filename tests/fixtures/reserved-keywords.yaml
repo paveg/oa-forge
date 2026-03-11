@@ -1,0 +1,74 @@
+openapi: "3.0.3"
+info:
+  title: Reserved Keywords API
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: Items with reserved keyword properties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ItemWithKeywords"
+    post:
+      operationId: createItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateItemBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemWithKeywords"
+components:
+  schemas:
+    ItemWithKeywords:
+      type: object
+      required:
+        - class
+        - type
+      properties:
+        class:
+          type: string
+          description: CSS class name
+        type:
+          type: string
+          enum:
+            - widget
+            - gadget
+        interface:
+          type: string
+        function:
+          type: string
+        return:
+          type: boolean
+        delete:
+          type: boolean
+        default:
+          type: string
+        new:
+          type: string
+        import:
+          type: string
+        export:
+          type: string
+    CreateItemBody:
+      type: object
+      required:
+        - class
+        - type
+      properties:
+        class:
+          type: string
+        type:
+          type: string

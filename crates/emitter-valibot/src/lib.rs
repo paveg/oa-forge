@@ -51,7 +51,8 @@ fn emit_schema_def(
     used: &mut UsedFunctions,
 ) -> Result<(), std::fmt::Error> {
     let base = type_repr_to_valibot(&typedef.repr, used);
-    let schema = append_constraints(&base, &typedef.constraints, used);
+    let with_format = append_format(&base, typedef.format.as_deref(), used);
+    let schema = append_constraints(&with_format, &typedef.constraints, used);
 
     match &typedef.repr {
         TypeRepr::Ref { name } => {
@@ -72,6 +73,43 @@ fn emit_schema_def(
     Ok(())
 }
 
+/// Emit a Valibot object schema for params at the given location.
+/// When `use_optional` is true, non-required params get `optional()` wrapping.
+fn emit_params_schema(
+    id: &str,
+    suffix: &str,
+    location: ParamLocation,
+    use_optional: bool,
+    endpoint: &Endpoint,
+    out: &mut String,
+    used: &mut UsedFunctions,
+) -> Result<(), std::fmt::Error> {
+    let params: Vec<&EndpointParam> = endpoint
+        .parameters
+        .iter()
+        .filter(|p| p.location == location)
+        .collect();
+
+    if params.is_empty() {
+        return Ok(());
+    }
+
+    used.mark("object");
+    write!(out, "export const {id}{suffix}Schema = object({{")?;
+    for p in &params {
+        let schema = type_repr_to_valibot(&p.repr, used);
+        if use_optional && !p.required {
+            used.mark("optional");
+            write!(out, " {}: optional({schema}),", p.name)?;
+        } else {
+            write!(out, " {}: {schema},", p.name)?;
+        }
+    }
+    writeln!(out, " }});")?;
+    writeln!(out)?;
+    Ok(())
+}
+
 fn emit_endpoint_schemas(
     endpoint: &Endpoint,
     out: &mut String,
@@ -79,44 +117,42 @@ fn emit_endpoint_schemas(
 ) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
 
-    let path_params: Vec<&EndpointParam> = endpoint
-        .parameters
-        .iter()
-        .filter(|p| p.location == ParamLocation::Path)
-        .collect();
-
-    if !path_params.is_empty() {
-        used.mark("object");
-        write!(out, "export const {id}PathParamsSchema = object({{")?;
-        for p in &path_params {
-            let schema = type_repr_to_valibot(&p.repr, used);
-            write!(out, " {}: {schema},", p.name)?;
-        }
-        writeln!(out, " }});")?;
-        writeln!(out)?;
-    }
-
-    let query_params: Vec<&EndpointParam> = endpoint
-        .parameters
-        .iter()
-        .filter(|p| p.location == ParamLocation::Query)
-        .collect();
-
-    if !query_params.is_empty() {
-        used.mark("object");
-        write!(out, "export const {id}QueryParamsSchema = object({{")?;
-        for p in &query_params {
-            let schema = type_repr_to_valibot(&p.repr, used);
-            if p.required {
-                write!(out, " {}: {schema},", p.name)?;
-            } else {
-                used.mark("optional");
-                write!(out, " {}: optional({schema}),", p.name)?;
-            }
-        }
-        writeln!(out, " }});")?;
-        writeln!(out)?;
-    }
+    emit_params_schema(
+        id,
+        "PathParams",
+        ParamLocation::Path,
+        false,
+        endpoint,
+        out,
+        used,
+    )?;
+    emit_params_schema(
+        id,
+        "QueryParams",
+        ParamLocation::Query,
+        true,
+        endpoint,
+        out,
+        used,
+    )?;
+    emit_params_schema(
+        id,
+        "HeaderParams",
+        ParamLocation::Header,
+        true,
+        endpoint,
+        out,
+        used,
+    )?;
+    emit_params_schema(
+        id,
+        "CookieParams",
+        ParamLocation::Cookie,
+        true,
+        endpoint,
+        out,
+        used,
+    )?;
 
     if let Some(response) = &endpoint.response {
         let schema = type_repr_to_valibot(response, used);
@@ -263,6 +299,29 @@ fn type_repr_to_valibot(repr: &TypeRepr, used: &mut UsedFunctions) -> String {
             "unknown()".to_string()
         }
     }
+}
+
+/// Map OpenAPI `format` to Valibot validators via pipe().
+fn append_format(schema: &str, format: Option<&str>, used: &mut UsedFunctions) -> String {
+    let Some(fmt) = format else {
+        return schema.to_string();
+    };
+    // Only append format validators to string() schemas
+    if !schema.starts_with("string()") {
+        return schema.to_string();
+    }
+    let (import, action) = match fmt {
+        "email" => ("email", "email()"),
+        "uri" | "url" => ("url", "url()"),
+        "uuid" => ("uuid", "uuid()"),
+        "date-time" => ("isoDateTime", "isoDateTime()"),
+        "date" => ("isoDate", "isoDate()"),
+        "ip" | "ipv4" => ("ip", "ip()"),
+        _ => return schema.to_string(),
+    };
+    used.mark("pipe");
+    used.mark(import);
+    format!("pipe({schema}, {action})")
 }
 
 /// Valibot v1 uses pipe() for constraints: `pipe(string(), minLength(3), maxLength(50))`

@@ -257,25 +257,28 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
     Ok(())
 }
 
+/// Check whether the endpoint has any params at the given location.
+fn has_params(endpoint: &Endpoint, location: ParamLocation) -> bool {
+    endpoint.parameters.iter().any(|p| p.location == location)
+}
+
 fn emit_type_imports(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
     let mut imports = Vec::new();
 
+    let param_suffixes = [
+        (ParamLocation::Path, "PathParams"),
+        (ParamLocation::Query, "QueryParams"),
+        (ParamLocation::Header, "HeaderParams"),
+        (ParamLocation::Cookie, "CookieParams"),
+    ];
+
     for endpoint in &api.endpoints {
         let id = &endpoint.operation_id;
-        let has_path = endpoint
-            .parameters
-            .iter()
-            .any(|p| p.location == ParamLocation::Path);
-        let has_query = endpoint
-            .parameters
-            .iter()
-            .any(|p| p.location == ParamLocation::Query);
 
-        if has_path {
-            imports.push(format!("{id}PathParams"));
-        }
-        if has_query {
-            imports.push(format!("{id}QueryParams"));
+        for (location, suffix) in &param_suffixes {
+            if has_params(endpoint, location.clone()) {
+                imports.push(format!("{id}{suffix}"));
+            }
         }
         if endpoint.response.is_some() && endpoint.response_type == ResponseType::Json {
             imports.push(format!("{id}Response"));
@@ -311,14 +314,10 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
     };
 
     // Build parameter list
-    let has_path = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Path);
-    let has_query = endpoint
-        .parameters
-        .iter()
-        .any(|p| p.location == ParamLocation::Query);
+    let has_path = has_params(endpoint, ParamLocation::Path);
+    let has_query = has_params(endpoint, ParamLocation::Query);
+    let has_header = has_params(endpoint, ParamLocation::Header);
+    let has_cookie = has_params(endpoint, ParamLocation::Cookie);
     let has_body = endpoint.request_body.is_some();
 
     let mut params = Vec::new();
@@ -327,6 +326,12 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
     }
     if has_query {
         params.push(format!("queryParams?: {id}QueryParams"));
+    }
+    if has_header {
+        params.push(format!("headerParams: {id}HeaderParams"));
+    }
+    if has_cookie {
+        params.push(format!("cookieParams: {id}CookieParams"));
     }
     if has_body {
         params.push(format!("body: {id}Body"));
@@ -375,14 +380,38 @@ fn emit_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fm
     };
 
     // Build headers
-    let headers_expr = match endpoint.request_content_type {
-        ContentType::Json => "{ 'Content-Type': 'application/json', ...config?.headers }",
-        ContentType::TextPlain => "{ 'Content-Type': 'text/plain', ...config?.headers }",
-        ContentType::OctetStream => {
-            "{ 'Content-Type': 'application/octet-stream', ...config?.headers }"
+    let headers_expr = if !has_header && !has_cookie {
+        // No special params — use the original simple format
+        match endpoint.request_content_type {
+            ContentType::Json => {
+                "{ 'Content-Type': 'application/json', ...config?.headers }".to_string()
+            }
+            ContentType::TextPlain => {
+                "{ 'Content-Type': 'text/plain', ...config?.headers }".to_string()
+            }
+            ContentType::OctetStream => {
+                "{ 'Content-Type': 'application/octet-stream', ...config?.headers }".to_string()
+            }
+            ContentType::FormData | ContentType::None => "config?.headers".to_string(),
         }
-        // FormData: don't set Content-Type, browser adds multipart boundary
-        ContentType::FormData | ContentType::None => "config?.headers",
+    } else {
+        let mut parts = Vec::new();
+        match endpoint.request_content_type {
+            ContentType::Json => parts.push("'Content-Type': 'application/json'".to_string()),
+            ContentType::TextPlain => parts.push("'Content-Type': 'text/plain'".to_string()),
+            ContentType::OctetStream => {
+                parts.push("'Content-Type': 'application/octet-stream'".to_string())
+            }
+            ContentType::FormData | ContentType::None => {}
+        }
+        if has_header {
+            parts.push("...headerParams as Record<string, string>".to_string());
+        }
+        if has_cookie {
+            parts.push("Cookie: Object.entries(cookieParams).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join('; ')".to_string());
+        }
+        parts.push("...config?.headers".to_string());
+        format!("{{ {} }}", parts.join(", "))
     };
 
     // Choose the right request function

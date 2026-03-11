@@ -22,7 +22,8 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
 
 fn emit_schema_def(typedef: &TypeDef, out: &mut String) -> Result<(), std::fmt::Error> {
     let base = type_repr_to_zod(&typedef.repr);
-    let schema = append_constraints(&base, &typedef.constraints);
+    let with_format = append_format(&base, typedef.format.as_deref());
+    let schema = append_constraints(&with_format, &typedef.constraints);
 
     match &typedef.repr {
         TypeRepr::Ref { name } => {
@@ -55,46 +56,61 @@ fn emit_schema_def(typedef: &TypeDef, out: &mut String) -> Result<(), std::fmt::
     Ok(())
 }
 
+/// Emit a Zod object schema for params at the given location.
+/// When `use_optional` is true, non-required params get `.optional()`.
+fn emit_params_schema(
+    id: &str,
+    suffix: &str,
+    location: ParamLocation,
+    use_optional: bool,
+    endpoint: &Endpoint,
+    out: &mut String,
+) -> Result<(), std::fmt::Error> {
+    let params: Vec<&EndpointParam> = endpoint
+        .parameters
+        .iter()
+        .filter(|p| p.location == location)
+        .collect();
+
+    if params.is_empty() {
+        return Ok(());
+    }
+
+    write!(out, "export const {id}{suffix}Schema = z.object({{")?;
+    for p in &params {
+        let schema = type_repr_to_zod(&p.repr);
+        if use_optional && !p.required {
+            write!(out, " {}: {schema}.optional(),", p.name)?;
+        } else {
+            write!(out, " {}: {schema},", p.name)?;
+        }
+    }
+    writeln!(out, " }});")?;
+    writeln!(out)?;
+    Ok(())
+}
+
 fn emit_endpoint_schemas(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
 
-    // Path params schema
-    let path_params: Vec<&EndpointParam> = endpoint
-        .parameters
-        .iter()
-        .filter(|p| p.location == ParamLocation::Path)
-        .collect();
-
-    if !path_params.is_empty() {
-        write!(out, "export const {id}PathParamsSchema = z.object({{")?;
-        for p in &path_params {
-            let schema = type_repr_to_zod(&p.repr);
-            write!(out, " {}: {schema},", p.name)?;
-        }
-        writeln!(out, " }});")?;
-        writeln!(out)?;
-    }
-
-    // Query params schema
-    let query_params: Vec<&EndpointParam> = endpoint
-        .parameters
-        .iter()
-        .filter(|p| p.location == ParamLocation::Query)
-        .collect();
-
-    if !query_params.is_empty() {
-        write!(out, "export const {id}QueryParamsSchema = z.object({{")?;
-        for p in &query_params {
-            let schema = type_repr_to_zod(&p.repr);
-            if p.required {
-                write!(out, " {}: {schema},", p.name)?;
-            } else {
-                write!(out, " {}: {schema}.optional(),", p.name)?;
-            }
-        }
-        writeln!(out, " }});")?;
-        writeln!(out)?;
-    }
+    emit_params_schema(id, "PathParams", ParamLocation::Path, false, endpoint, out)?;
+    emit_params_schema(id, "QueryParams", ParamLocation::Query, true, endpoint, out)?;
+    emit_params_schema(
+        id,
+        "HeaderParams",
+        ParamLocation::Header,
+        true,
+        endpoint,
+        out,
+    )?;
+    emit_params_schema(
+        id,
+        "CookieParams",
+        ParamLocation::Cookie,
+        true,
+        endpoint,
+        out,
+    )?;
 
     // Response schema
     if let Some(response) = &endpoint.response {
@@ -211,6 +227,27 @@ fn type_repr_to_zod(repr: &TypeRepr) -> String {
         }
         TypeRepr::Any => "z.unknown()".to_string(),
     }
+}
+
+/// Map OpenAPI `format` to Zod built-in validators.
+fn append_format(schema: &str, format: Option<&str>) -> String {
+    let Some(fmt) = format else {
+        return schema.to_string();
+    };
+    // Only append format validators to z.string() schemas
+    if !schema.starts_with("z.string()") {
+        return schema.to_string();
+    }
+    let suffix = match fmt {
+        "email" => ".email()",
+        "uri" | "url" => ".url()",
+        "uuid" => ".uuid()",
+        "date-time" => ".datetime()",
+        "date" => ".date()",
+        "ip" | "ipv4" => ".ip()",
+        _ => return schema.to_string(),
+    };
+    format!("{schema}{suffix}")
 }
 
 fn append_constraints(schema: &str, c: &Constraints) -> String {

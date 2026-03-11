@@ -202,7 +202,7 @@ pub struct Schema {
     #[serde(default)]
     pub discriminator: Option<Discriminator>,
     #[serde(default)]
-    pub additional_properties: Option<Box<SchemaOrRef>>,
+    pub additional_properties: Option<AdditionalProperties>,
     #[serde(default)]
     pub nullable: bool,
     #[serde(default)]
@@ -235,6 +235,15 @@ pub struct Schema {
     /// OpenAPI 3.1: `$defs` for local schema definitions (JSON Schema Draft 2020-12)
     #[serde(rename = "$defs", default)]
     pub defs: Option<IndexMap<String, SchemaOrRef>>,
+}
+
+/// `additionalProperties` can be a boolean or a schema.
+/// `true` → Record<string, unknown>, `false` → no extra props, schema → Record<string, T>
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum AdditionalProperties {
+    Bool(bool),
+    Schema(Box<SchemaOrRef>),
 }
 
 #[derive(Debug, Clone, Deserialize)]

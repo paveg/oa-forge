@@ -1,0 +1,73 @@
+openapi: "3.0.3"
+info:
+  title: Header & Cookie Parameter API
+  version: "1.0.0"
+paths:
+  /resources:
+    get:
+      operationId: listResources
+      summary: List resources with API key header
+      parameters:
+        - name: X-API-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Request-Id
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A list of resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Resource"
+  /resources/{resourceId}:
+    get:
+      operationId: getResource
+      parameters:
+        - name: resourceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: session_token
+          in: cookie
+          required: true
+          schema:
+            type: string
+        - name: Accept-Language
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+components:
+  schemas:
+    Resource:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string

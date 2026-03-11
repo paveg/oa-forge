@@ -72,3 +72,73 @@ fn snapshot_error_responses() {
     let output = generate_types(yaml);
     insta::assert_snapshot!(output);
 }
+
+#[test]
+fn snapshot_edge_cases() {
+    let yaml = include_str!("../../../tests/fixtures/edge-cases.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_openapi31() {
+    let yaml = include_str!("../../../tests/fixtures/openapi31.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_multipart_paginated() {
+    let yaml = include_str!("../../../tests/fixtures/multipart-paginated.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_header_cookie_params() {
+    let yaml = include_str!("../../../tests/fixtures/header-cookie-params.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_allof_conflict() {
+    let yaml = include_str!("../../../tests/fixtures/allof-conflict.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_anyof_plain() {
+    let yaml = include_str!("../../../tests/fixtures/anyof-plain.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_inline_schemas() {
+    let yaml = include_str!("../../../tests/fixtures/inline-schemas.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_reserved_keywords() {
+    let yaml = include_str!("../../../tests/fixtures/reserved-keywords.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_large_scale() {
+    let yaml = include_str!("../../../tests/fixtures/large-scale.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn snapshot_coverage_gaps() {
+    let yaml = include_str!("../../../tests/fixtures/coverage-gaps.yaml");
+    let output = generate_types(yaml);
+    insta::assert_snapshot!(output);
+}
