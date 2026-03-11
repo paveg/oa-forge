@@ -82,11 +82,8 @@ fn sort_imports(lines: &mut [&str]) {
 
     // Replace the import block in-place
     let import_count = sorted.len();
-    let original_block_size = end - start;
 
-    // We need to handle the case where the sorted block may differ in size
-    // from the original due to blank lines being removed.
-    // Simple approach: copy sorted imports, then fill rest with empty lines
+    // Copy sorted imports into the original slots, filling excess with empty lines
     for (i, slot) in lines[start..end].iter_mut().enumerate() {
         if i < import_count {
             *slot = sorted[i];
@@ -95,9 +92,7 @@ fn sort_imports(lines: &mut [&str]) {
         }
     }
 
-    // If we had fewer imports than original lines, the extra "" will be
-    // collapsed by the blank-line logic in format()
-    let _ = original_block_size;
+    // Extra "" entries will be collapsed by the blank-line logic in format()
 }
 
 #[cfg(test)]

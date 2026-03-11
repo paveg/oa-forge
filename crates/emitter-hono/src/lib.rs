@@ -18,17 +18,11 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
 
     writeln!(out, "export type AppType = {{")?;
     for (path, endpoints) in &paths {
-        let hono_path = to_hono_path(path);
+        let hono_path = path_to_colon_params(path);
         writeln!(out, "  '{hono_path}': {{")?;
 
         for ep in endpoints {
-            let method = match ep.method {
-                HttpMethod::Get => "$get",
-                HttpMethod::Post => "$post",
-                HttpMethod::Put => "$put",
-                HttpMethod::Patch => "$patch",
-                HttpMethod::Delete => "$delete",
-            };
+            let method = format!("${}", ep.method.as_lower());
 
             writeln!(out, "    {method}: {{")?;
 
@@ -36,22 +30,12 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
             writeln!(out, "      input: {{")?;
 
             // Path params
-            let path_params: Vec<&EndpointParam> = ep
-                .parameters
-                .iter()
-                .filter(|p| p.location == ParamLocation::Path)
-                .collect();
-            if !path_params.is_empty() {
+            if ep.has_params(&ParamLocation::Path) {
                 writeln!(out, "        param: Types.{}PathParams;", ep.operation_id)?;
             }
 
             // Query params
-            let query_params: Vec<&EndpointParam> = ep
-                .parameters
-                .iter()
-                .filter(|p| p.location == ParamLocation::Query)
-                .collect();
-            if !query_params.is_empty() {
+            if ep.has_params(&ParamLocation::Query) {
                 writeln!(out, "        query: Types.{}QueryParams;", ep.operation_id)?;
             }
 
@@ -77,17 +61,4 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
     writeln!(out, "}};")?;
 
     Ok(())
-}
-
-/// Convert OpenAPI path `/pets/{petId}` to Hono path `/pets/:petId`.
-fn to_hono_path(path: &str) -> String {
-    let mut result = String::with_capacity(path.len());
-    for ch in path.chars() {
-        match ch {
-            '{' => result.push(':'),
-            '}' => {}
-            _ => result.push(ch),
-        }
-    }
-    result
 }

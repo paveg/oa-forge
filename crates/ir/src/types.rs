@@ -105,6 +105,25 @@ pub struct Endpoint {
     pub error_response: Option<TypeRepr>,
 }
 
+impl Endpoint {
+    /// Whether the endpoint has any params at the given location.
+    pub fn has_params(&self, location: &ParamLocation) -> bool {
+        self.parameters.iter().any(|p| &p.location == location)
+    }
+
+    /// TypeScript return type string for this endpoint.
+    pub fn return_type_ts(&self) -> String {
+        match self.response_type {
+            ResponseType::Json if self.response.is_some() => {
+                format!("{}Response", self.operation_id)
+            }
+            ResponseType::Text => "string".to_string(),
+            ResponseType::Blob => "Blob".to_string(),
+            _ => "void".to_string(),
+        }
+    }
+}
+
 /// Content type of the request body.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ContentType {
@@ -157,10 +176,95 @@ pub enum HttpMethod {
     Delete,
 }
 
+impl HttpMethod {
+    /// Uppercase string (e.g. "GET", "POST").
+    pub fn as_upper(&self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+        }
+    }
+
+    /// Lowercase string (e.g. "get", "post").
+    pub fn as_lower(&self) -> &'static str {
+        match self {
+            Self::Get => "get",
+            Self::Post => "post",
+            Self::Put => "put",
+            Self::Patch => "patch",
+            Self::Delete => "delete",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParamLocation {
     Path,
     Query,
     Header,
     Cookie,
+}
+
+// ─── Shared path utilities ────────────────────────────────────────────────────
+
+/// Convert `/pets/{petId}` to template literal `/pets/${pathParams.petId}`.
+pub fn path_to_template_literal(path: &str) -> String {
+    let mut result = String::new();
+    let mut chars = path.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '{' {
+            let param_name: String = chars.by_ref().take_while(|&c| c != '}').collect();
+            result.push_str(&format!("${{pathParams.{param_name}}}"));
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Convert `/pets/{petId}` to colon-param format `/pets/:petId` (MSW / Hono).
+pub fn path_to_colon_params(path: &str) -> String {
+    let mut result = String::with_capacity(path.len());
+    for ch in path.chars() {
+        match ch {
+            '{' => result.push(':'),
+            '}' => {}
+            _ => result.push(ch),
+        }
+    }
+    result
+}
+
+/// Collect standard type import names from an API spec.
+/// Returns names like `listPetsPathParams`, `listPetsResponse`, `listPetsBody`, etc.
+pub fn collect_type_imports(api: &ApiSpec) -> Vec<String> {
+    let mut imports = Vec::new();
+    let param_suffixes = [
+        (ParamLocation::Path, "PathParams"),
+        (ParamLocation::Query, "QueryParams"),
+        (ParamLocation::Header, "HeaderParams"),
+        (ParamLocation::Cookie, "CookieParams"),
+    ];
+
+    for endpoint in &api.endpoints {
+        let id = &endpoint.operation_id;
+        for (location, suffix) in &param_suffixes {
+            if endpoint.has_params(location) {
+                imports.push(format!("{id}{suffix}"));
+            }
+        }
+        if endpoint.response.is_some() && endpoint.response_type == ResponseType::Json {
+            imports.push(format!("{id}Response"));
+        }
+        if endpoint.request_body.is_some() {
+            imports.push(format!("{id}Body"));
+        }
+        if endpoint.error_response.is_some() {
+            imports.push(format!("{id}Error"));
+        }
+    }
+    imports
 }

@@ -25,37 +25,12 @@ pub fn emit(api: &ApiSpec, out: &mut String) -> Result<(), std::fmt::Error> {
     Ok(())
 }
 
-/// Convert OpenAPI path params `{petId}` to MSW colon params `:petId`.
-fn to_msw_path(path: &str) -> String {
-    let mut result = String::with_capacity(path.len());
-
-    for ch in path.chars() {
-        match ch {
-            '{' => result.push(':'),
-            '}' => {}
-            _ => result.push(ch),
-        }
-    }
-
-    result
-}
-
-fn http_method_name(method: &HttpMethod) -> &'static str {
-    match method {
-        HttpMethod::Get => "get",
-        HttpMethod::Post => "post",
-        HttpMethod::Put => "put",
-        HttpMethod::Patch => "patch",
-        HttpMethod::Delete => "delete",
-    }
-}
-
 /// Emit a factory function for a single endpoint handler.
 /// Factory pattern allows users to override the response.
 fn emit_handler_function(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
-    let method = http_method_name(&endpoint.method);
-    let msw_path = to_msw_path(&endpoint.path);
+    let method = endpoint.method.as_lower();
+    let msw_path = path_to_colon_params(&endpoint.path);
 
     let has_response = endpoint.response.is_some();
     let response_type = if has_response {
@@ -109,10 +84,10 @@ mod tests {
 
     #[test]
     fn converts_openapi_path_to_msw() {
-        assert_eq!(to_msw_path("/pets"), "/pets");
-        assert_eq!(to_msw_path("/pets/{petId}"), "/pets/:petId");
+        assert_eq!(path_to_colon_params("/pets"), "/pets");
+        assert_eq!(path_to_colon_params("/pets/{petId}"), "/pets/:petId");
         assert_eq!(
-            to_msw_path("/users/{userId}/posts/{postId}"),
+            path_to_colon_params("/users/{userId}/posts/{postId}"),
             "/users/:userId/posts/:postId"
         );
     }

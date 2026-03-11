@@ -46,6 +46,8 @@ jobs:
     name: Benchmark Regression Check
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,36 +57,33 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install critcmp
-        run: cargo install critcmp --locked
-
-      - name: Benchmark (PR branch)
-        run: cargo bench -- --save-baseline pr
-
       - name: Benchmark (base branch)
         run: |
           git checkout ${{ github.event.pull_request.base.sha }}
-          cargo bench -- --save-baseline base
+          cargo bench --bench codegen -- --save-baseline base
           git checkout -
 
-      - name: Compare benchmarks
+      - name: Benchmark (PR branch, compare against base)
+        run: cargo bench --bench codegen -- --baseline base 2>&1 | tee bench-output.txt
+
+      - name: Check for regressions
         run: |
-          critcmp base pr --threshold 10 | tee bench-comparison.txt
-          # Fail if any benchmark regressed by more than 10%
-          if critcmp base pr --threshold 10 2>&1 | grep -q "regressed"; then
-            echo "::warning::Benchmark regression detected (>10%)"
+          if grep -q "regressed" bench-output.txt; then
+            echo "::warning::Benchmark regression detected"
           fi
 
-      - name: Post benchmark comparison
-        if: always()
+      - name: Post benchmark results
+        if: success()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync('bench-comparison.txt', 'utf8');
+            const raw = fs.readFileSync('bench-output.txt', 'utf8');
+            const lines = raw.split('\n').filter(l => /change:|time:/.test(l) || /Benchmarking\s/.test(l));
+            const body = lines.length > 0 ? lines.join('\n') : 'No significant changes detected.';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## Benchmark Comparison\n\n\`\`\`\n${body}\n\`\`\`\n`
+              body: `## Benchmark Results\n\n\`\`\`\n${body}\n\`\`\`\n`
             });
