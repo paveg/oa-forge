@@ -18,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -39,16 +39,16 @@ criterion = { version = "0.5", features = ["html_reports"] }
 toml = "0.8"
 
 # internal crates
-oa-forge-parser = { version = "0.1.1", path = "crates/parser" }
-oa-forge-ir = { version = "0.1.1", path = "crates/ir" }
-oa-forge-formatter = { version = "0.1.1", path = "crates/formatter" }
-oa-forge-emitter-types = { version = "0.1.1", path = "crates/emitter-types" }
-oa-forge-emitter-client = { version = "0.1.1", path = "crates/emitter-client" }
-oa-forge-emitter-query = { version = "0.1.1", path = "crates/emitter-query" }
-oa-forge-emitter-zod = { version = "0.1.1", path = "crates/emitter-zod" }
-oa-forge-emitter-valibot = { version = "0.1.1", path = "crates/emitter-valibot" }
-oa-forge-emitter-msw = { version = "0.1.1", path = "crates/emitter-msw" }
-oa-forge-emitter-mock = { version = "0.1.1", path = "crates/emitter-mock" }
-oa-forge-emitter-axios = { version = "0.1.1", path = "crates/emitter-axios" }
-oa-forge-emitter-hono = { version = "0.1.1", path = "crates/emitter-hono" }
-oa-forge-emitter-angular = { version = "0.1.1", path = "crates/emitter-angular" }
+oa-forge-parser = { version = "0.2.0", path = "crates/parser" }
+oa-forge-ir = { version = "0.2.0", path = "crates/ir" }
+oa-forge-formatter = { version = "0.2.0", path = "crates/formatter" }
+oa-forge-emitter-types = { version = "0.2.0", path = "crates/emitter-types" }
+oa-forge-emitter-client = { version = "0.2.0", path = "crates/emitter-client" }
+oa-forge-emitter-query = { version = "0.2.0", path = "crates/emitter-query" }
+oa-forge-emitter-zod = { version = "0.2.0", path = "crates/emitter-zod" }
+oa-forge-emitter-valibot = { version = "0.2.0", path = "crates/emitter-valibot" }
+oa-forge-emitter-msw = { version = "0.2.0", path = "crates/emitter-msw" }
+oa-forge-emitter-mock = { version = "0.2.0", path = "crates/emitter-mock" }
+oa-forge-emitter-axios = { version = "0.2.0", path = "crates/emitter-axios" }
+oa-forge-emitter-hono = { version = "0.2.0", path = "crates/emitter-hono" }
+oa-forge-emitter-angular = { version = "0.2.0", path = "crates/emitter-angular" }
