@@ -59,12 +59,12 @@ jobs:
         run: cargo install critcmp --locked
 
       - name: Benchmark (PR branch)
-        run: cargo bench -- --save-baseline pr
+        run: cargo bench --bench codegen -- --save-baseline pr
 
       - name: Benchmark (base branch)
         run: |
           git checkout ${{ github.event.pull_request.base.sha }}
-          cargo bench -- --save-baseline base
+          cargo bench --bench codegen -- --save-baseline base
           git checkout -
 
       - name: Compare benchmarks

@@ -331,11 +331,13 @@ fn emit_custom_endpoint_fn(
 
     // Build the single-object argument for the custom instance
     let headers_expr = build_custom_headers(endpoint, has_header, has_cookie);
-    let has_extra_fields =
-        has_body || headers_expr.is_some();
+    let has_extra_fields = has_body || headers_expr.is_some();
 
     if has_extra_fields {
-        writeln!(out, "  return {export_name}({{ url: `{url_with_query}`, method: '{method}',")?;
+        writeln!(
+            out,
+            "  return {export_name}({{ url: `{url_with_query}`, method: '{method}',"
+        )?;
         if let Some(h) = headers_expr {
             writeln!(out, "    headers: {h},")?;
         }
@@ -354,11 +356,7 @@ fn emit_custom_endpoint_fn(
     Ok(())
 }
 
-fn build_custom_headers(
-    endpoint: &Endpoint,
-    has_header: bool,
-    has_cookie: bool,
-) -> Option<String> {
+fn build_custom_headers(endpoint: &Endpoint, has_header: bool, has_cookie: bool) -> Option<String> {
     let mut parts = Vec::new();
     match endpoint.request_content_type {
         ContentType::Json => parts.push("'Content-Type': 'application/json'".to_string()),
@@ -382,10 +380,7 @@ fn build_custom_headers(
     }
 }
 
-fn emit_custom_body(
-    endpoint: &Endpoint,
-    out: &mut String,
-) -> Result<(), std::fmt::Error> {
+fn emit_custom_body(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Error> {
     match endpoint.request_content_type {
         ContentType::Json => writeln!(out, "    data: JSON.stringify(body),")?,
         ContentType::FormData => {
@@ -509,10 +504,7 @@ fn build_url_with_query(endpoint: &Endpoint) -> String {
     }
 }
 
-fn emit_fetch_endpoint_fn(
-    endpoint: &Endpoint,
-    out: &mut String,
-) -> Result<(), std::fmt::Error> {
+fn emit_fetch_endpoint_fn(endpoint: &Endpoint, out: &mut String) -> Result<(), std::fmt::Error> {
     let id = &endpoint.operation_id;
     let method = endpoint.method.as_upper();
 

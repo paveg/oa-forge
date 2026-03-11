@@ -1,4 +1,4 @@
-use oa_forge_emitter_client::{emit, ClientStyle, CustomClientConfig};
+use oa_forge_emitter_client::{ClientStyle, CustomClientConfig, emit};
 use oa_forge_ir::convert;
 use oa_forge_parser::parse;
 

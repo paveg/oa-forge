@@ -420,8 +420,8 @@ fn emit_client(
 /// Compute a relative import path from `from_dir` to `target_file`.
 /// Strips `.ts`/`.mts` extensions and ensures `./` or `../` prefix.
 fn compute_relative_import(from_dir: &std::path::Path, target_file: &std::path::Path) -> String {
-    let rel = pathdiff::diff_paths(target_file, from_dir)
-        .unwrap_or_else(|| target_file.to_path_buf());
+    let rel =
+        pathdiff::diff_paths(target_file, from_dir).unwrap_or_else(|| target_file.to_path_buf());
     let mut s = rel.to_string_lossy().to_string();
     // Normalize Windows backslashes to forward slashes
     s = s.replace('\\', "/");
@@ -746,8 +746,7 @@ fn generate(opts: &GenerateOptions) -> Result<()> {
                 writeln!(ep_content).unwrap();
 
                 oa_forge_emitter_types::emit_endpoint(ep, &mut ep_content).unwrap();
-                oa_forge_emitter_client::emit_endpoint(ep, &ep_style, &mut ep_content)
-                    .unwrap();
+                oa_forge_emitter_client::emit_endpoint(ep, &ep_style, &mut ep_content).unwrap();
 
                 let ep_formatted = oa_forge_formatter::format(&ep_content);
                 files.push((
@@ -810,12 +809,10 @@ fn run_generate(args: GenerateArgs, config: Config) -> Result<()> {
     // Build client style from custom client path
     let client_style = if let Some(ref ccp) = custom_client_path {
         let import_path = compute_relative_import(&output, ccp);
-        oa_forge_emitter_client::ClientStyle::Custom(
-            oa_forge_emitter_client::CustomClientConfig {
-                import_path,
-                export_name: custom_client_name,
-            },
-        )
+        oa_forge_emitter_client::ClientStyle::Custom(oa_forge_emitter_client::CustomClientConfig {
+            import_path,
+            export_name: custom_client_name,
+        })
     } else {
         oa_forge_emitter_client::ClientStyle::Fetch
     };
@@ -827,7 +824,9 @@ fn run_generate(args: GenerateArgs, config: Config) -> Result<()> {
         anyhow::bail!("--custom-client-path is only supported with --client fetch");
     }
     if custom_client_path.is_some() && hooks {
-        anyhow::bail!("--hooks is not compatible with --custom-client-path (hooks require RequestConfig from the fetch client)");
+        anyhow::bail!(
+            "--hooks is not compatible with --custom-client-path (hooks require RequestConfig from the fetch client)"
+        );
     }
 
     let opts = GenerateOptions {
@@ -924,8 +923,8 @@ enum MigrateFormat {
 
 /// Load an Orval config file via tsx and return raw JSON value.
 fn load_orval_config(path: &std::path::Path) -> Result<serde_json::Value> {
-    let abs_path =
-        std::fs::canonicalize(path).map_err(|e| anyhow::anyhow!("cannot resolve {}: {e}", path.display()))?;
+    let abs_path = std::fs::canonicalize(path)
+        .map_err(|e| anyhow::anyhow!("cannot resolve {}: {e}", path.display()))?;
     let eval_script = format!(
         "import c from '{}'; process.stdout.write(JSON.stringify(c.default ?? c))",
         abs_path.display()
@@ -962,10 +961,7 @@ struct MigrateResult {
     unsupported: Vec<String>,
 }
 
-fn migrate_orval_project(
-    name: &str,
-    project: &serde_json::Value,
-) -> MigrateResult {
+fn migrate_orval_project(name: &str, project: &serde_json::Value) -> MigrateResult {
     let mut lines = Vec::new();
     let mut converted = Vec::new();
     let mut warnings = Vec::new();
@@ -988,7 +984,10 @@ fn migrate_orval_project(
         if input_val.get("filters").is_some_and(|f| !f.is_null()) {
             unsupported.push("input.filters (tag/schema filtering) → not yet supported".into());
         }
-        if input_val.get("override").is_some_and(|o| o.get("transformer").is_some()) {
+        if input_val
+            .get("override")
+            .is_some_and(|o| o.get("transformer").is_some())
+        {
             unsupported.push("input.override.transformer → not yet supported".into());
         }
     }
@@ -1017,7 +1016,10 @@ fn migrate_orval_project(
             }
         };
         lines.push(format!("  split: '{}',", split_val));
-        converted.push(format!("output.mode: \"{}\" → split: \"{}\"", mode, split_val));
+        converted.push(format!(
+            "output.mode: \"{}\" → split: \"{}\"",
+            mode, split_val
+        ));
     }
 
     // output.httpClient → client
@@ -1025,7 +1027,10 @@ fn migrate_orval_project(
         match http_client {
             "fetch" | "axios" => {
                 lines.push(format!("  client: '{}',", http_client));
-                converted.push(format!("output.httpClient: \"{}\" → client: \"{}\"", http_client, http_client));
+                converted.push(format!(
+                    "output.httpClient: \"{}\" → client: \"{}\"",
+                    http_client, http_client
+                ));
             }
             "angular" => {
                 lines.push("  client: 'angular',".into());
@@ -1043,22 +1048,33 @@ fn migrate_orval_project(
             "react-query" => {
                 lines.push("  hooks: true,".into());
                 lines.push("  query_framework: 'react',".into());
-                converted.push("output.client: \"react-query\" → hooks: true, query_framework: \"react\"".into());
+                converted.push(
+                    "output.client: \"react-query\" → hooks: true, query_framework: \"react\""
+                        .into(),
+                );
             }
             "vue-query" => {
                 lines.push("  hooks: true,".into());
                 lines.push("  query_framework: 'vue',".into());
-                converted.push("output.client: \"vue-query\" → hooks: true, query_framework: \"vue\"".into());
+                converted.push(
+                    "output.client: \"vue-query\" → hooks: true, query_framework: \"vue\"".into(),
+                );
             }
             "solid-query" => {
                 lines.push("  hooks: true,".into());
                 lines.push("  query_framework: 'solid',".into());
-                converted.push("output.client: \"solid-query\" → hooks: true, query_framework: \"solid\"".into());
+                converted.push(
+                    "output.client: \"solid-query\" → hooks: true, query_framework: \"solid\""
+                        .into(),
+                );
             }
             "svelte-query" => {
                 lines.push("  hooks: true,".into());
                 lines.push("  query_framework: 'svelte',".into());
-                converted.push("output.client: \"svelte-query\" → hooks: true, query_framework: \"svelte\"".into());
+                converted.push(
+                    "output.client: \"svelte-query\" → hooks: true, query_framework: \"svelte\""
+                        .into(),
+                );
             }
             "zod" => {
                 lines.push("  zod: true,".into());
@@ -1097,11 +1113,23 @@ fn migrate_orval_project(
     }
 
     // output.prettier / biome
-    if output_val.get("prettier").is_some_and(|p| p.as_bool() == Some(true)) {
-        warnings.push("output.prettier → oa-forge has a built-in formatter (no external dependency needed)".into());
+    if output_val
+        .get("prettier")
+        .is_some_and(|p| p.as_bool() == Some(true))
+    {
+        warnings.push(
+            "output.prettier → oa-forge has a built-in formatter (no external dependency needed)"
+                .into(),
+        );
     }
-    if output_val.get("biome").is_some_and(|b| b.as_bool() == Some(true)) {
-        warnings.push("output.biome → oa-forge has a built-in formatter (no external dependency needed)".into());
+    if output_val
+        .get("biome")
+        .is_some_and(|b| b.as_bool() == Some(true))
+    {
+        warnings.push(
+            "output.biome → oa-forge has a built-in formatter (no external dependency needed)"
+                .into(),
+        );
     }
 
     // ── output.override ──
@@ -1111,15 +1139,24 @@ fn migrate_orval_project(
         if let Some(mutator) = override_val.get("mutator") {
             if let Some(path) = mutator.as_str() {
                 lines.push(format!("  custom_client_path: '{}',", path));
-                converted.push(format!("override.mutator: \"{}\" → custom_client_path", path));
+                converted.push(format!(
+                    "override.mutator: \"{}\" → custom_client_path",
+                    path
+                ));
             } else if mutator.is_object() {
                 if let Some(path) = mutator["path"].as_str() {
                     lines.push(format!("  custom_client_path: '{}',", path));
-                    converted.push(format!("override.mutator.path → custom_client_path: \"{}\"", path));
+                    converted.push(format!(
+                        "override.mutator.path → custom_client_path: \"{}\"",
+                        path
+                    ));
                 }
                 if let Some(name) = mutator["name"].as_str() {
                     lines.push(format!("  custom_client_name: '{}',", name));
-                    converted.push(format!("override.mutator.name → custom_client_name: \"{}\"", name));
+                    converted.push(format!(
+                        "override.mutator.name → custom_client_name: \"{}\"",
+                        name
+                    ));
                 } else if mutator["default"].as_bool() == Some(true) {
                     warnings.push("override.mutator.default: true → oa-forge only supports named exports; rename your default export".into());
                 }
@@ -1139,9 +1176,11 @@ fn migrate_orval_project(
                 converted.push("override.header → header".into());
             } else if header.as_bool() == Some(false) {
                 lines.push("  header: '',".into());
-                converted.push("override.header: false → header: \"\" (empty, disables header)".into());
+                converted
+                    .push("override.header: false → header: \"\" (empty, disables header)".into());
             } else {
-                unsupported.push("override.header (function) → only string headers supported".into());
+                unsupported
+                    .push("override.header (function) → only string headers supported".into());
             }
         }
 
@@ -1170,17 +1209,26 @@ fn migrate_orval_project(
         }
 
         // transformer
-        if override_val.get("transformer").is_some_and(|t| !t.is_null()) {
+        if override_val
+            .get("transformer")
+            .is_some_and(|t| !t.is_null())
+        {
             unsupported.push("override.transformer → not yet supported".into());
         }
 
         // useTypeOverInterfaces
-        if override_val.get("useTypeOverInterfaces").is_some_and(|u| !u.is_null()) {
+        if override_val
+            .get("useTypeOverInterfaces")
+            .is_some_and(|u| !u.is_null())
+        {
             unsupported.push("override.useTypeOverInterfaces → not yet supported".into());
         }
 
         // enumGenerationType
-        if override_val.get("enumGenerationType").is_some_and(|e| !e.is_null()) {
+        if override_val
+            .get("enumGenerationType")
+            .is_some_and(|e| !e.is_null())
+        {
             unsupported.push("override.enumGenerationType → not yet supported".into());
         }
 
@@ -1188,7 +1236,10 @@ fn migrate_orval_project(
         if override_val.get("formData").is_some_and(|f| !f.is_null()) {
             unsupported.push("override.formData → not yet supported".into());
         }
-        if override_val.get("formUrlEncoded").is_some_and(|f| !f.is_null()) {
+        if override_val
+            .get("formUrlEncoded")
+            .is_some_and(|f| !f.is_null())
+        {
             unsupported.push("override.formUrlEncoded → not yet supported".into());
         }
 
@@ -1196,7 +1247,9 @@ fn migrate_orval_project(
         if let Some(zod) = override_val.get("zod") {
             if zod.is_object() {
                 lines.push("  zod: true,".into());
-                converted.push("override.zod → zod: true (granular zod options not yet supported)".into());
+                converted.push(
+                    "override.zod → zod: true (granular zod options not yet supported)".into(),
+                );
             }
         }
     }
@@ -1206,7 +1259,10 @@ fn migrate_orval_project(
         if let Some(after) = hooks.get("afterAllFilesWrite") {
             if let Some(cmd) = after.as_str() {
                 lines.push(format!("  after_write: ['{}'],", cmd));
-                converted.push(format!("hooks.afterAllFilesWrite → after_write: [\"{}\"]", cmd));
+                converted.push(format!(
+                    "hooks.afterAllFilesWrite → after_write: [\"{}\"]",
+                    cmd
+                ));
             } else if let Some(arr) = after.as_array() {
                 let cmds: Vec<String> = arr
                     .iter()
@@ -1313,9 +1369,7 @@ fn run_migrate(args: MigrateArgs) -> Result<()> {
             for line in &result.config_lines {
                 let trimmed = line.trim().trim_end_matches(',');
                 // Convert 'value' → "value" and key: → key =
-                let toml_line = trimmed
-                    .replace('\'', "\"")
-                    .replacen(": ", " = ", 1);
+                let toml_line = trimmed.replace('\'', "\"").replacen(": ", " = ", 1);
                 // Handle arrays: convert [...] to toml syntax
                 out.push_str(&toml_line);
                 out.push('\n');
@@ -1334,7 +1388,11 @@ fn run_migrate(args: MigrateArgs) -> Result<()> {
 
     // Print migration report to stderr
     eprintln!();
-    eprintln!("── Migration report: {} (from {}) ──", project_name, args.from.display());
+    eprintln!(
+        "── Migration report: {} (from {}) ──",
+        project_name,
+        args.from.display()
+    );
     eprintln!();
 
     if !result.converted.is_empty() {
@@ -1413,16 +1471,61 @@ mod tests {
         let result = migrate_orval_project("test", &orval);
 
         // Verify converted fields
-        assert!(result.config_lines.iter().any(|l| l.contains("input: './openapi.yaml'")));
-        assert!(result.config_lines.iter().any(|l| l.contains("output: './src/api/generated'")));
-        assert!(result.config_lines.iter().any(|l| l.contains("split: 'tag'")));
-        assert!(result.config_lines.iter().any(|l| l.contains("hooks: true")));
-        assert!(result.config_lines.iter().any(|l| l.contains("query_framework: 'react'")));
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("input: './openapi.yaml'"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("output: './src/api/generated'"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("split: 'tag'"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("hooks: true"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("query_framework: 'react'"))
+        );
         assert!(result.config_lines.iter().any(|l| l.contains("mock: true")));
-        assert!(result.config_lines.iter().any(|l| l.contains("custom_client_path: './src/api/custom-fetch.ts'")));
-        assert!(result.config_lines.iter().any(|l| l.contains("custom_client_name: 'customFetch'")));
-        assert!(result.config_lines.iter().any(|l| l.contains("after_write:")));
-        assert!(result.config_lines.iter().any(|l| l.contains("header: '/* generated */'")));
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("custom_client_path: './src/api/custom-fetch.ts'"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("custom_client_name: 'customFetch'"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("after_write:"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("header: '/* generated */'"))
+        );
 
         assert!(!result.converted.is_empty());
         assert!(result.unsupported.is_empty());
@@ -1452,15 +1555,50 @@ mod tests {
 
         let result = migrate_orval_project("test", &orval);
 
-        assert!(result.unsupported.iter().any(|u| u.contains("input.filters")));
-        assert!(result.unsupported.iter().any(|u| u.contains("input.override.transformer")));
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("input.filters"))
+        );
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("input.override.transformer"))
+        );
         assert!(result.unsupported.iter().any(|u| u.contains("baseUrl")));
         assert!(result.unsupported.iter().any(|u| u.contains("clean")));
-        assert!(result.unsupported.iter().any(|u| u.contains("override.query")));
-        assert!(result.unsupported.iter().any(|u| u.contains("override.tags")));
-        assert!(result.unsupported.iter().any(|u| u.contains("override.transformer")));
-        assert!(result.unsupported.iter().any(|u| u.contains("useTypeOverInterfaces")));
-        assert!(result.unsupported.iter().any(|u| u.contains("enumGenerationType")));
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("override.query"))
+        );
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("override.tags"))
+        );
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("override.transformer"))
+        );
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("useTypeOverInterfaces"))
+        );
+        assert!(
+            result
+                .unsupported
+                .iter()
+                .any(|u| u.contains("enumGenerationType"))
+        );
     }
 
     #[test]
@@ -1472,7 +1610,12 @@ mod tests {
 
         let result = migrate_orval_project("test", &orval);
 
-        assert!(result.config_lines.iter().any(|l| l.contains("split: 'tag'")));
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("split: 'tag'"))
+        );
         assert!(result.warnings.is_empty());
     }
 
@@ -1489,7 +1632,12 @@ mod tests {
 
         let result = migrate_orval_project("test", &orval);
 
-        assert!(result.config_lines.iter().any(|l| l.contains("custom_client_path: './src/custom.ts'")));
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("custom_client_path: './src/custom.ts'"))
+        );
     }
 
     #[test]
@@ -1517,8 +1665,18 @@ mod tests {
 
         let result = migrate_orval_project("test", &orval);
 
-        assert!(result.config_lines.iter().any(|l| l.contains("input: './spec.yaml'")));
-        assert!(result.config_lines.iter().any(|l| l.contains("output: './out'")));
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("input: './spec.yaml'"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("output: './out'"))
+        );
     }
 
     #[test]
@@ -1530,8 +1688,18 @@ mod tests {
 
         let result = migrate_orval_project("test", &orval);
 
-        assert!(result.config_lines.iter().any(|l| l.contains("hooks: true")));
-        assert!(result.config_lines.iter().any(|l| l.contains("query_framework: 'vue'")));
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("hooks: true"))
+        );
+        assert!(
+            result
+                .config_lines
+                .iter()
+                .any(|l| l.contains("query_framework: 'vue'"))
+        );
     }
 
     #[test]
